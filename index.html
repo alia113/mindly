@@ -698,7 +698,7 @@ async function startListen() {
 function stopListen(silent) { if (V.rec) { try { silent ? V.rec.abort() : V.rec.stop(); } catch (e) {} } if (silent && V.state === "listening") setState("idle"); }
 function handle(text) {
   const turn = ++V.turn; setState("thinking"); setTx(text);
-  setTimeout(async () => { let r; try { r = await respondAI(text); } catch (e) { r = { text: "Sorry, something went wrong on my side. Nothing was changed." }; } if (V.turn !== turn || !V.active) return; showReply(r, text); }, 300);
+  setTimeout(async () => { let r; try { r = await respondAI(text); } catch (e) { r = { text: "Sorry, something went wrong on my side. Nothing was changed." }; } if (V.turn !== turn || !V.active) return; showReply(r, text); }, 60);
 }
 function showReply(r, q) {
   const ar = (r.text.match(/[\u0600-\u06FF]/g) || []).length > (r.text.match(/[A-Za-z]/g) || []).length; setTx(r.text);
@@ -808,7 +808,7 @@ function startPulse() { clearInterval(V.ptick); V.ptick = setInterval(() => { tr
 async function ttsFetch(text) {
   const c = new AbortController(), tm = setTimeout(() => c.abort(), 20000);
   try {
-    const r = await fetch(AI_URL + "/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice: DB.settings.voice || "Kore" }), signal: c.signal }); if (!r.ok) return null; const j = await r.json(); if (!j.audio) return null;
+    const r = await fetch(AI_URL + "/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice: DB.settings.voice || "Kore", model: V.ttsModel === false ? undefined : "gemini-3.8-flash-lite-tts" }), signal: c.signal }); if (!r.ok) { if (V.ttsModel !== false) { V.ttsModel = false; clearTimeout(tm); return ttsFetch(text); } return null; } const j = await r.json(); if (!j.audio) return null;
     const bin = atob(j.audio), off = bin.slice(0, 4) === "RIFF" ? 44 : 0, n = (bin.length - off) >> 1, f = new Float32Array(n);
     for (let i = 0; i < n; i++) { let v = bin.charCodeAt(off + 2 * i) | (bin.charCodeAt(off + 2 * i + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
     const m = /rate=(\d+)/i.exec(j.mime || ""), buf = V.out.createBuffer(1, n, m ? +m[1] : 24000); buf.copyToChannel(f, 0); return buf;
@@ -964,4 +964,4 @@ if (location.hash === "#voice") openVoiceScreen();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { /* offline cache optional */ }
 </script>
 </body>
-</html>
+    </html>
