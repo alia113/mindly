@@ -1187,7 +1187,7 @@ settingsSheet = function () {
 };
 $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
 /* ---- v16: reminders (web push + local) ---- */
-const VAPID_KEY = "BEzIW0_HcknnmC5c7Aeh9YqOxs2h93m6zuKLf-BwdGBQzmmSk-iHX0NNZ7Cp-ocXYV-GxbbFAmjCWtaZYOsqwKs";
+const VAPID_KEY = "BGLkBR7M2gpL__vt7ftUHlkwQs8pG3FYIfAA5mTdrXkgDMaBFzgimJDUxjZ2h99Ct6c73o9-VFSlXZ5Hjw6_bD4";
 const PUSHK = "mindly.push";
 const pushSub = () => { try { return JSON.parse(localStorage.getItem(PUSHK) || "null"); } catch (e) { return null; } };
 function parseHM(t) { if (!t) return null; const m = String(t).match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|ص|م)?/i); if (!m) return null; let h = +m[1], mi = +(m[2] || 0); const ap = (m[3] || "").toLowerCase(); if ((ap === "pm" || ap === "م") && h < 12) h += 12; if ((ap === "am" || ap === "ص") && h === 12) h = 0; return h > 23 || mi > 59 ? null : [h, mi]; }
@@ -1206,12 +1206,19 @@ function pushSoon() { if (!pushSub()) return; clearTimeout(_pushT); _pushT = set
 async function pushSyncNow(force) { const sub = pushSub(); if (!sub) return false; const items = reminderItems(); const h = JSON.stringify(items.map(i => i.id + i.b)); if (!force && h === _pushH) return true; const r = await pushPost("/push-set", { sub, items }); if (r && r.ok) { _pushH = h; return true; } return false; }
 { const _ss = window.syncSoon; window.syncSoon = function () { try { pushSoon(); } catch (e) {} if (_ss) return _ss.apply(this, arguments); }; }
 const _u8 = b => { const s = (b + "=".repeat((4 - b.length % 4) % 4)).split("-").join("+").split("_").join("/"); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+async function ensurePushSub(reg) {
+  let sub = await reg.pushManager.getSubscription();
+  if (sub) { try { const k = sub.options && sub.options.applicationServerKey; const cur = _u8(VAPID_KEY); const same = k && k.byteLength === cur.length && new Uint8Array(k).every((v, i) => v === cur[i]); if (!same) { await sub.unsubscribe(); sub = null; } } catch (e) {} }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _u8(VAPID_KEY) });
+  return sub;
+}
+setTimeout(async () => { try { if (localStorage.getItem(PUSHK) && "Notification" in window && Notification.permission === "granted") { const reg = await navigator.serviceWorker.ready; const sub = await ensurePushSub(reg); const j = JSON.stringify(sub.toJSON()); if (j !== localStorage.getItem(PUSHK)) { localStorage.setItem(PUSHK, j); await pushSyncNow(true); } } } catch (e) {} }, 4000);
 async function enablePush() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
   if (ios && !standalone) return "install";
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
   const perm = await Notification.requestPermission(); if (perm !== "granted") return "denied";
-  try { const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription(); if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _u8(VAPID_KEY) }); localStorage.setItem(PUSHK, JSON.stringify(sub.toJSON())); } catch (e) { return "error"; }
+  try { const reg = await navigator.serviceWorker.ready; const sub = await ensurePushSub(reg); localStorage.setItem(PUSHK, JSON.stringify(sub.toJSON())); } catch (e) { return "error"; }
   return (await pushSyncNow(true)) ? "ok" : "server";
 }
 async function disablePush() { const sub = pushSub(); try { const reg = await navigator.serviceWorker.ready; const s = await reg.pushManager.getSubscription(); if (s) await s.unsubscribe(); } catch (e) {} if (sub) await pushPost("/push-off", { sub }); localStorage.removeItem(PUSHK); }
@@ -1318,7 +1325,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v25 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); if (sh) { const bt = document.createElement("button"); bt.className = "btn"; bt.style.cssText = "font-size:11px;min-height:32px;margin-top:6px"; const lab = () => "Full-screen fix: " + (localStorage.getItem("mindly.ext") === "1" ? "ON" : "OFF") + " (tap to switch)"; bt.textContent = lab(); bt.onclick = () => { localStorage.setItem("mindly.ext", localStorage.getItem("mindly.ext") === "1" ? "0" : "1"); fixInset(); bt.textContent = lab(); }; sh.appendChild(bt); } }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v26 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); if (sh) { const bt = document.createElement("button"); bt.className = "btn"; bt.style.cssText = "font-size:11px;min-height:32px;margin-top:6px"; const lab = () => "Full-screen fix: " + (localStorage.getItem("mindly.ext") === "1" ? "ON" : "OFF") + " (tap to switch)"; bt.textContent = lab(); bt.onclick = () => { localStorage.setItem("mindly.ext", localStorage.getItem("mindly.ext") === "1" ? "0" : "1"); fixInset(); bt.textContent = lab(); }; sh.appendChild(bt); } }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
-  </html>
+                                                                                                                          </html>
