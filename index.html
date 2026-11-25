@@ -120,6 +120,7 @@ main{padding-bottom:calc(var(--sb,0px) + 96px)!important}nav.bar .lens.press{tra
 @media(max-width:360px){nav.bar{left:8px;right:8px}}
 #voice #vlang,#voice #vset{min-height:40px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px}
 .dlg .sheet:has(#qct){padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));max-height:55dvh}
+.dlg .sheet:has(#qct) .shead{margin-bottom:-40px;background:transparent;pointer-events:none}.dlg .sheet:has(#qct) .shead .sx{pointer-events:auto}.dlg .sheet:has(#qct) .shead + .m{padding-top:14px;min-height:38px;padding-inline-end:48px}
 </style>
 </head>
 <body>
@@ -1218,7 +1219,7 @@ $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
 if (pushSub()) pushSyncNow(true);
 /* ---- v17 nav: bottom anchoring + spring lens ---- */
 document.body.appendChild($("#nav"));
-function fixInset() { try { let pr = document.getElementById("insetProbe"); if (!pr) { pr = document.createElement("div"); pr.id = "insetProbe"; pr.style.cssText = "position:fixed;left:0;top:0;width:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)"; document.body.appendChild(pr); } const inset = pr.offsetHeight || 0; const portrait = innerHeight >= innerWidth; const gap = portrait && screen.width <= 500 ? Math.max(0, screen.height - innerHeight) : 0; document.documentElement.style.setProperty("--sb", Math.max(0, inset - gap) + "px"); } catch (e) {} }
+function fixInset() { try { let pr = document.getElementById("insetProbe"); if (!pr) { pr = document.createElement("div"); pr.id = "insetProbe"; pr.style.cssText = "position:fixed;left:0;top:0;width:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)"; document.body.appendChild(pr); } const inset = pr.offsetHeight || 0; const portrait = innerHeight >= innerWidth; const full = Math.max(screen.height || 0, window.outerHeight || 0), gap = portrait && screen.width <= 500 ? Math.max(0, full - innerHeight) : 0; window._diag = "inner " + innerWidth + "x" + innerHeight + " · screen " + screen.width + "x" + screen.height + " · outer " + window.outerHeight + " · inset " + inset + " · gap " + gap + " · standalone " + (navigator.standalone ? 1 : 0); document.documentElement.style.setProperty("--sb", Math.max(0, inset - gap) + "px"); } catch (e) {} }
 fixInset(); addEventListener("resize", fixInset); addEventListener("orientationchange", () => setTimeout(fixInset, 300)); addEventListener("pageshow", fixInset);
 let _lensPrev = null;
 function moveLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); } const on = nav.querySelector("button.on:not(.vb)"); if (!on) { l.style.opacity = 0; return; } const cur = { left: on.offsetLeft + 2, width: on.offsetWidth - 4 }; const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; }; if (_lensPrev && anim && (Math.abs(_lensPrev.left - cur.left) > 2)) { const lo = Math.min(_lensPrev.left, cur.left), hi = Math.max(_lensPrev.left + _lensPrev.width, cur.left + cur.width); l.style.transition = "left .16s ease-out,width .16s ease-out"; set({ left: lo, width: hi - lo }); clearTimeout(l._t); l._t = setTimeout(() => { l.style.transition = "left .5s cubic-bezier(.34,1.56,.5,1),width .5s cubic-bezier(.34,1.56,.5,1)"; set(cur); }, 150); } else { l.style.transition = "none"; set(cur); } _lensPrev = cur; }
@@ -1265,6 +1266,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
   </html>
