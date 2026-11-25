@@ -121,6 +121,11 @@ main{padding-bottom:calc(var(--sb,0px) + 96px)!important}nav.bar .lens.press{tra
 #voice #vlang,#voice #vset{min-height:40px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px}
 .dlg .sheet:has(#qct){padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));max-height:55dvh}
 .dlg .sheet:has(#qct) .shead{margin-bottom:-40px;background:transparent;pointer-events:none}.dlg .sheet:has(#qct) .shead .sx{pointer-events:auto}.dlg .sheet:has(#qct) .shead + .m{padding-top:14px;min-height:38px;padding-inline-end:48px}
+nav.bar{touch-action:none;-webkit-user-select:none;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,.26),rgba(255,255,255,.12))!important;-webkit-backdrop-filter:blur(14px) saturate(2.2) brightness(1.5)!important;backdrop-filter:blur(14px) saturate(2.2) brightness(1.5)!important;will-change:transform}
+nav.bar button{color:rgba(255,255,255,.88)}nav.bar button.on{color:#fff}
+nav.bar .lens{background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.22));will-change:left,width,transform}
+nav.bar .lens.drag{transition:width .15s,transform .25s cubic-bezier(.34,1.56,.5,1)!important}
+nav.bar .lens.press{transform:scale(1.14,1.08)}
 </style>
 </head>
 <body>
@@ -1227,6 +1232,16 @@ function moveLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.q
 $("#nav").addEventListener("pointerdown", e => { const b = e.target.closest("button[data-v]"), l = $("#nav .lens"); if (b && l && b.classList.contains("on")) l.classList.add("press"); });
 ["pointerup", "pointercancel", "pointerleave"].forEach(ev => $("#nav").addEventListener(ev, () => { const l = $("#nav .lens"); if (l) l.classList.remove("press"); }));
 addEventListener("resize", () => moveLens(false)); renderNav(); setTimeout(() => moveLens(false), 300);
+
+/* drag the lens across tabs */
+(function () { const nav = $("#nav"); let dg = null;
+  const L = () => nav.querySelector(".lens");
+  nav.addEventListener("pointerdown", e => { const b = e.target.closest("button[data-v]"); const l = L(); if (!b || !l) return; dg = { x0: e.clientX, moved: false, lx: e.clientX, v: 0 }; l.classList.add("press"); try { nav.setPointerCapture(e.pointerId); } catch (z) {} });
+  nav.addEventListener("pointermove", e => { if (!dg) return; const l = L(); if (!l) return; if (!dg.moved && Math.abs(e.clientX - dg.x0) > 6) { dg.moved = true; l.classList.add("drag"); } if (!dg.moved) return; const r = nav.getBoundingClientRect(), w = l.offsetWidth; let x = e.clientX - r.left - w / 2; x = Math.max(3, Math.min(r.width - w - 3, x)); const v = Math.min(Math.abs(e.clientX - dg.lx), 30); dg.lx = e.clientX; l.style.left = x + "px"; l.style.transform = "scale(" + (1.14 + v * 0.006) + "," + (1.08 - v * 0.002) + ")"; });
+  const end = e => { if (!dg) return; const l = L(), d = dg; dg = null; if (!l) return; l.classList.remove("press"); l.style.transform = ""; if (!d.moved) { l.classList.remove("drag"); return; } l.classList.remove("drag"); const lc = l.offsetLeft + l.offsetWidth / 2; let best = null, bd = 1e9; nav.querySelectorAll("button[data-v]").forEach(b => { const dd = Math.abs(b.offsetLeft + b.offsetWidth / 2 - lc); if (dd < bd) { bd = dd; best = b; } }); _lensPrev = { left: l.offsetLeft, width: l.offsetWidth }; if (best) { if (best.dataset.v !== view) best.click(); else moveLens(true); } window._noClick = true; setTimeout(() => window._noClick = false, 400); };
+  nav.addEventListener("pointerup", end); nav.addEventListener("pointercancel", end);
+  nav.addEventListener("click", e => { if (window._noClick) { e.stopPropagation(); e.preventDefault(); } }, true);
+})();
 /* ---- v17: quick capture, prep, nudges, merge ---- */
 const _i = s => esc(s);
 function quickCapture() {
