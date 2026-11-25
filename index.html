@@ -183,7 +183,7 @@ nav.bar{transition:transform .25s ease,opacity .2s}nav.bar.kb{transform:translat
    tasks, events, commitments, memories) linked by persistent ids.
    ============================================================ */
 const KEY = "mindly.v1";
-const uid = p => p + "_" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-3);
+const uid = p => p + "_" + (crypto.randomUUID ? crypto.randomUUID().replace(/-/g, "").slice(0, 16) : Math.random().toString(36).slice(2, 12) + Date.now().toString(36));
 const DAY = 864e5;
 const iso = d => { const x = new Date(d); return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
 const today = () => iso(Date.now());
@@ -528,7 +528,7 @@ async function respondAI(text) {
     let r = null;
     for (let at = 0; at < 4; at++) {
       const c = new AbortController(); const tm = setTimeout(() => c.abort(), 12000);
-      try { r = await fetch(AI_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, today: today(), ctx }), signal: c.signal }); } catch (er) { r = null; } finally { clearTimeout(tm); }
+      try { r = await fetch(AI_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, today: today(), ctx, lang: DB.settings.lang === "ar" ? "ar" : "en" }), signal: c.signal }); } catch (er) { r = null; } finally { clearTimeout(tm); }
       if (r && r.ok) break; if (r && r.status < 500) break; await new Promise(z => setTimeout(z, 700));
     }
     if (!r || !r.ok) throw new Error("ai"); const j = await r.json(); RESP = isAr(text) || (DB.settings.lang === "ar" && !/[A-Za-z]{3}/.test(text));
@@ -1007,7 +1007,7 @@ function importBackupFile(f) { const rd = new FileReader(); rd.onload = () => { 
 function syncBlock() {
   const code = syncCode(), ok = +localStorage.getItem("mindly.syncok") || 0;
   return '<div class="m" style="margin-top:14px"><b>' + S("Backup & sync", "النسخ الاحتياطي والمزامنة") + '</b></div>' +
-    (code ? '<div class="m">' + S("Sync is ON. Your sync code (keep it private, it is the key to your data):", "المزامنة شغالة. كود المزامنة (خليه سري، هو مفتاح بياناتك):") + '</div><div style="font:600 15px ui-monospace,monospace;letter-spacing:1px;margin:6px 0;user-select:all" dir="ltr" id="scode">' + code + '</div><div class="m" id="sst">' + (ok ? S("Last synced ", "آخر مزامنة ") + new Date(ok).toLocaleTimeString() : "") + '</div><div class="acts"><button class="btn" id="scp">' + S("Copy code", "نسخ الكود") + '</button><button class="btn" id="snow">' + S("Sync now", "زامن الآن") + '</button><button class="btn d" id="soff">' + S("Turn off", "إيقاف") + '</button></div>'
+    (code ? '<div class="m">' + S("Sync is ON. Your sync code (keep it private, it is the key to your data):", "المزامنة شغالة. كود المزامنة (خليه سري، هو مفتاح بياناتك):") + '</div><div style="font:600 15px ui-monospace,monospace;letter-spacing:1px;margin:6px 0;user-select:all" dir="ltr" id="scode">' + code + '</div><div class="m" id="sst">' + (ok ? S("Last synced ", "آخر مزامنة ") + new Date(ok).toLocaleTimeString() : "") + '</div><div class="acts"><button class="btn" id="scp">' + S("Copy code", "نسخ الكود") + '</button><button class="btn" id="snow">' + S("Sync now", "زامن الآن") + '</button><button class="btn" id="srot">' + S("New code", "كود جديد") + '</button><button class="btn d" id="soff">' + S("Turn off", "إيقاف") + '</button></div>'
       : '<div class="m">' + S("Keep your data safe and use it on other devices. No account: a private code is the key.", "احفظ بياناتك واستخدمها على أجهزة تانية. بدون حساب: كود خاص هو المفتاح.") + '</div><div class="acts"><button class="btn p" id="son">' + S("Turn on sync", "تشغيل المزامنة") + '</button></div><div class="m" style="margin-top:8px">' + S("Already have a code from another device?", "عندك كود من جهاز تاني؟") + '</div><div class="acts"><input id="sin" dir="ltr" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" style="flex:1;min-width:0"><button class="btn" id="sgo">' + S("Connect", "اتصال") + '</button></div>') +
     '<div class="acts" style="margin-top:10px"><button class="btn" id="bex">' + S("Export backup file", "تصدير نسخة احتياطية") + '</button><button class="btn" id="bim">' + S("Import backup file", "استيراد نسخة") + '</button><input type="file" id="bfile" accept=".json,application/json" style="display:none"></div>';
 }
@@ -1018,6 +1018,7 @@ function bindSync() {
   if (q("#sgo")) q("#sgo").onclick = async () => { const c = q("#sin").value.trim().toUpperCase().replace(/[^A-Z2-7]/g, "").replace(/(.{5})(?=.)/g, "$1-"); if (c.length < 23) { toast(S("That code looks too short.", "الكود قصير.")); return; } const r = await syncCall("/sync-get", { code: c }); if (!r) { toast(S("Couldn’t reach the server.", "ما قدرت أوصل للسيرفر.")); return; } if (!r.ts || !r.data || !validDB(r.data)) { toast(S("No data found for that code.", "ما لقيت بيانات لهذا الكود.")); return; } if (!confirm(S("Replace the data on this device with the synced copy? Your current data is kept as a safety copy.", "تستبدل بيانات هذا الجهاز بالنسخة المتزامنة؟ بياناتك الحالية بتنحفظ كنسخة أمان."))) return; localStorage.setItem(SYNCKEY, c); adoptDB(r.data, r.ts); _lastPush = r.ts; localStorage.setItem("mindly.syncok", String(Date.now())); toast(S("Connected. Data loaded.", "تم الاتصال وتحميل البيانات.")); closeSheet(); };
   if (q("#scp")) q("#scp").onclick = () => { const t = syncCode(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(S("Code copied.", "تم النسخ.")), () => toast(S("Select the code and copy it.", "حدد الكود وانسخه."))); };
   if (q("#snow")) q("#snow").onclick = async () => { q("#sst").textContent = "…"; const r = await syncPull(true); await syncPush(true); toast(r ? S("Synced.", "تمت المزامنة.") : S("Couldn’t reach the server.", "ما قدرت أوصل للسيرفر.")); re(); };
+  if (q("#srot")) q("#srot").onclick = async () => { if (!confirm(S("Create a new sync code? Your other devices stop syncing until you enter the new code. The old cloud copy is deleted.", "تعمل كود مزامنة جديد؟ أجهزتك الثانية بتوقف عن المزامنة لحد ما تدخل الكود الجديد. النسخة القديمة على السيرفر بتنحذف."))) return; const old = syncCode(); localStorage.setItem(SYNCKEY, genSyncCode()); const ok = await syncPush(true); if (ok) { await syncCall("/sync-del", { code: old }); toast(S("New code is active. Save it.", "الكود الجديد شغال. احفظه.")); } else { localStorage.setItem(SYNCKEY, old); toast(S("Couldn’t reach the server. Nothing changed.", "ما قدرت أوصل للسيرفر. ما تغير شي.")); } re(); };
   if (q("#soff")) q("#soff").onclick = () => { if (confirm(S("Turn off sync on this device? Your data stays here and on the server.", "توقف المزامنة على هذا الجهاز؟ بياناتك تبقى هنا وعلى السيرفر."))) { localStorage.removeItem(SYNCKEY); re(); } };
   q("#bex").onclick = exportBackup; q("#bim").onclick = () => q("#bfile").click(); q("#bfile").onchange = e => { if (e.target.files[0]) importBackupFile(e.target.files[0]); };
 }
@@ -1329,7 +1330,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v28 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v29 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
-</html>
+  </html>
