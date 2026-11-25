@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#050505">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Mindly"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-180.png"><link rel="icon" href="icon-192.png">
 <title>MINDLY AI</title>
 <style>
 :root{--bg:#050505;--card:#111214;--card2:#17181b;--line:#24262a;--tx:#f4f4f5;--mut:#8b8d93;--acc:#8ab4ff;--pink:#ff7ad9;--ok:#6ee7b7;--warn:#fdba74}
@@ -1077,7 +1078,9 @@ void main(){
 /* boot */
 applyLang();
 if (location.hash === "#voice") openVoiceScreen();
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { /* offline cache optional */ }
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
+/* share target / quick capture via URL: ?text=...&title=...&url=... */
+(function () { try { const q = new URLSearchParams(location.search), t = [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join(" ").trim(); if (t) { history.replaceState(null, "", location.pathname); setTimeout(() => { respondAI(t).then(r => { toast(r && r.saved ? S("Saved to Mindly.", "انحفظ في Mindly.") : S("Captured, nothing to save.", "تم الاستلام، ما في شي للحفظ.")); render(); }).catch(() => {}); }, 800); } } catch (e) {} })();
 </script>
 </body>
-  </html>
+</html>
