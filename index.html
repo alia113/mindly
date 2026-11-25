@@ -1136,7 +1136,7 @@ void main(){
 /* boot */
 applyLang();
 if (location.hash === "#voice") openVoiceScreen();
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { navigator.serviceWorker.register("sw.js").catch(() => {}); }
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => { const up = () => { try { reg.update(); } catch (e) {} }; document.addEventListener("visibilitychange", () => { if (!document.hidden) up(); }); addEventListener("pageshow", up); setInterval(up, 60000); let first = !navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener("controllerchange", () => { if (first) { first = false; return; } if (!window._reloaded) { window._reloaded = true; location.reload(); } }); }).catch(() => {}); }
 /* share target / quick capture via URL: ?text=...&title=...&url=... */
 (function () { try { const q = new URLSearchParams(location.search), t = [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join(" ").trim(); if (t) { history.replaceState(null, "", location.pathname); setTimeout(() => { respondAI(t).then(r => { toast(r && r.saved ? S("Saved to Mindly.", "انحفظ في Mindly.") : S("Captured, nothing to save.", "تم الاستلام، ما في شي للحفظ.")); render(); }).catch(() => {}); }, 800); } } catch (e) {} })();
 /* ---- v11: profile, privacy, encrypted sync, app lock ---- */
@@ -1312,7 +1312,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v24 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
-  </html>
+    </html>
