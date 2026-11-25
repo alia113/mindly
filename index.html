@@ -453,15 +453,19 @@ function evening() {
    CONVERSATION — one entry point used by voice and text.
    ============================================================ */
 const QUESTION = /^\s*(what|when|who|which|how|do you|did|show|list|tell me|summar|remind me what|where|is there|are there)\b|\?\s*$|؟\s*$|^\s*(شو|ايش|مين|متى|امتى|وين|كم|ماذا|من|هل|اعرض|وريني)\b/i;
-const AI_URL = "";
+const AI_URL = "https://mindly-ai.abd88926.workers.dev";
 const isCmd = t => /resume memory|pause|stop.*(memory|remember)|forget|undo|briefing|evening review|لا تحفظ|وقف|اوقف|انسى|تراجع|ملخص|كمل الحفظ|استمر|رجع الحفظ|صباح الخير|مراجعة|مراجعه/i.test(t);
 async function respondAI(text) {
   if (!AI_URL || DB.settings.paused || DB.settings.noAI || isCmd(text)) return respond(text);
   try {
     const ctx = { people: DB.people.map(p => ({ name: p.name, relation: p.relation, profession: p.profession, project: p.project, comm: p.comm })), commitments: DB.commitments.filter(c => c.status !== "done").map(c => ({ title: c.title, person: c.personName, owner: c.owner, due: c.due, status: c.status, inputId: c.inputId })), tasks: DB.tasks.filter(t => t.status !== "done").map(t => ({ title: t.title, due: t.due })), events: DB.events.map(e => ({ title: e.title, date: e.date })), memories: DB.memories.slice(-60).map(m => ({ type: m.type, text: m.text, inputId: m.inputId })) };
-    const c = new AbortController(); setTimeout(() => c.abort(), 15000);
-    const r = await fetch(AI_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, today: today(), ctx }), signal: c.signal });
-    if (!r.ok) throw new Error("ai " + r.status); const j = await r.json(); RESP = isAr(text) || (DB.settings.lang === "ar" && !/[A-Za-z]{3}/.test(text));
+    let r = null;
+    for (let at = 0; at < 4; at++) {
+      const c = new AbortController(); const tm = setTimeout(() => c.abort(), 12000);
+      try { r = await fetch(AI_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, today: today(), ctx }), signal: c.signal }); } catch (er) { r = null; } finally { clearTimeout(tm); }
+      if (r && r.ok) break; if (r && r.status < 500) break; await new Promise(z => setTimeout(z, 700));
+    }
+    if (!r || !r.ok) throw new Error("ai"); const j = await r.json(); RESP = isAr(text) || (DB.settings.lang === "ar" && !/[A-Za-z]{3}/.test(text));
     try {
       if (j.intent === "save" && j.extraction) {
         const e = j.extraction; const ex = Object.assign({ people: [], commitments: [], tasks: [], events: [], memories: [], prefs: [], done: [], interactionPerson: null, isPast: false, date: today() }, e);
