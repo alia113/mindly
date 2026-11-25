@@ -128,7 +128,7 @@ const blank = () => ({
 let DB;
 try { DB = JSON.parse(localStorage.getItem(KEY)) || blank(); } catch (e) { DB = blank(); }
 { const b = blank(); for (const k in b) if (!(k in DB)) DB[k] = b[k]; for (const k in b.settings) if (!(k in DB.settings)) DB.settings[k] = b.settings[k]; }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} };
+const save = () => { DB.updatedAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} if (window.syncSoon) window.syncSoon(); };
 const byId = (arr, id) => arr.find(x => x.id === id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const isAr = s => /[\u0600-\u06FF]/.test(s || "");
@@ -848,8 +848,17 @@ $("#vlang").onclick = () => setLang(DB.settings.lang === "ar" ? "en" : "ar");
 /* ---- Gemini Live real-time voice (falls back to the classic loop) ---- */
 V.liveBroken = false; V.liveOn = false; V.ls = null;
 const LIVE_WS = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=";
+function liveCtx() {
+  let o = []; const P = DB.people.slice(0, 40).map(p => p.name + (p.relation ? " (" + p.relation + ")" : "") + (p.profession ? ", " + p.profession : "")); if (P.length) o.push("People: " + P.join("; "));
+  const C = DB.commitments.filter(c => c.status !== "done").slice(0, 30).map(c => (c.owner === "them" ? "waiting on " : "I owe ") + (c.personName || "") + ": " + c.title + (c.due ? " (due " + c.due + ")" : "")); if (C.length) o.push("Open commitments: " + C.join("; "));
+  const T = DB.tasks.filter(t => t.status !== "done").slice(0, 20).map(t => t.title + (t.due ? " (due " + t.due + ")" : "")); if (T.length) o.push("Tasks: " + T.join("; "));
+  const t0 = today(), E = DB.events.filter(e => e.date >= t0).slice(0, 15).map(e => e.date + " " + e.title); if (E.length) o.push("Upcoming events: " + E.join("; "));
+  const M = DB.memories.slice(-20).map(m => String(m.text || "").slice(0, 120)); if (M.length) o.push("Recent notes: " + M.join("; "));
+  return o.length ? (" Today is " + t0 + ". Saved Mindly data about the user (use it naturally when relevant, do not recite it unprompted): " + o.join(". ")).slice(0, 5000) : " Today is " + t0 + ". No data saved yet.";
+}
+function liveSave(t) { try { if (!t || (t.split(/\s+/).length < 3 && t.length < 14)) return; respondAI(t).then(r => { if (r && r.saved) { toast(S("Saved to Mindly.", "انحفظ في Mindly.")); try { if (!V.active) render(); } catch (e) {} } }).catch(() => {}); } catch (e) {} }
 function liveSystem() {
-  return "You are Mindly, the personal voice assistant of Ali (a man: always address him with masculine forms in Arabic) and second brain, speaking out loud in a live conversation. The user speaks casually, in Egyptian or Levantine (Shami) Arabic dialect, Modern Standard Arabic, or English, and often mixes them. Names and words may be pronounced informally or with a strong accent; listen carefully and use context to understand what was meant. Always reply in the language and dialect the user just used (Arabic dialect for dialect speech, English for English). Sound natural, warm and relaxed like a smart friend: short sentences, no lists, no reading out symbols or markdown, usually one to three sentences. If you truly did not catch something, ask briefly to repeat the specific part. Do not say you are an AI model unless asked.";
+  return liveCtx() + " " + "You are Mindly, the personal voice assistant of Ali (a man: always address him with masculine forms in Arabic) and second brain, speaking out loud in a live conversation. The user speaks casually, in Egyptian or Levantine (Shami) Arabic dialect, Modern Standard Arabic, or English, and often mixes them. Names and words may be pronounced informally or with a strong accent; listen carefully and use context to understand what was meant. Always reply in the language and dialect the user just used (Arabic dialect for dialect speech, English for English). Sound natural, warm and relaxed like a smart friend: short sentences, no lists, no reading out symbols or markdown, usually one to three sentences. If you truly did not catch something, ask briefly to repeat the specific part. Do not say you are an AI model unless asked. Things the user tells you about people, promises, tasks, events or ideas are saved automatically into Mindly in the background, so when he asks you to remember something, just say briefly that you will.";
 }
 function liveSetState(s) { if (V.liveOn && V.state !== s) setState(s); }
 async function startLive() {
@@ -889,12 +898,12 @@ function liveMsg(S, m) {
   const ctx = V.out; if (m.goAway) { toast("Live session is ending soon."); }
   const sc = m.serverContent; if (!sc) return;
   if (sc.interrupted) { liveFlush(S); }
-  if (sc.inputTranscription && sc.inputTranscription.text) { if (S.outTx) { S.outTx = ""; S.inTx = ""; } S.inTx += sc.inputTranscription.text; S.lastUser = Date.now(); setTx(S.inTx.trim()); if (V.state !== "speaking") liveSetState("listening"); }
+  if (sc.inputTranscription && sc.inputTranscription.text) { if (S.saved) { S.outTx = ""; S.inTx = ""; S.saved = false; } S.inTx += sc.inputTranscription.text; S.lastUser = Date.now(); setTx(S.inTx.trim()); if (V.state !== "speaking") liveSetState("listening"); }
   if (sc.outputTranscription && sc.outputTranscription.text) { S.outTx += sc.outputTranscription.text; setTx(S.outTx.trim()); }
   if (sc.modelTurn) for (const p of sc.modelTurn.parts || []) if (p.inlineData && p.inlineData.data) {
     const bin = atob(p.inlineData.data), n = bin.length >> 1, f = new Float32Array(n); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
     const b = ctx.createBuffer(1, n, 24000); b.copyToChannel(f, 0); const s = ctx.createBufferSource(); s.buffer = b; s.connect(V.oan); const t = Math.max(S.lt, ctx.currentTime + 0.06); s.start(t); S.lt = t + b.duration; S.src.push(s); s.onended = () => { S.src = S.src.filter(x => x !== s); };
-    V.speaking = true; liveSetState("speaking");
+    V.speaking = true; liveSetState("speaking"); if (!S.saved && S.inTx.trim()) { S.saved = true; liveSave(S.inTx.trim()); }
   }
   if (sc.turnComplete) { S.inTx = S.inTx; }
 }
@@ -913,6 +922,41 @@ $("#vmic").onclick = async () => {
 const _sendClassic = sendText;
 const sendLive = () => { const t = $("#vin").value.trim(); if (V.liveOn && V.ls && V.ls.ws.readyState === 1) { if (!t) return; $("#vin").value = ""; V.ls.inTx = t; V.ls.outTx = ""; setTx(t); V.ls.ws.send(JSON.stringify({ realtimeInput: { text: t } })); return; } _sendClassic(); };
 $("#vsend").onclick = sendLive; $("#vin").onkeydown = e => { if (e.key === "Enter") sendLive(); };
+/* ---- Backup, restore and cross-device sync ---- */
+const SYNCKEY = "mindly.sync"; const syncCode = () => localStorage.getItem(SYNCKEY) || "";
+let _syncT = null, _lastPush = 0, _lastPull = 0;
+function genSyncCode() { const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", b = new Uint8Array(20); crypto.getRandomValues(b); let s = ""; for (let i = 0; i < 20; i++) { s += A[b[i] % 32]; if (i % 5 === 4 && i < 19) s += "-"; } return s; }
+function fillDefaults(d) { const b = blank(); for (const k in b) if (!(k in d)) d[k] = b[k]; for (const k in b.settings) if (!(k in d.settings)) d.settings[k] = b.settings[k]; return d; }
+function validDB(d) { return d && typeof d === "object" && Array.isArray(d.people) && Array.isArray(d.commitments) && d.settings && typeof d.settings === "object"; }
+function backupLocal() { try { localStorage.setItem("mindly.prev", JSON.stringify(DB)); } catch (e) {} }
+function adoptDB(d, ts) { backupLocal(); DB = fillDefaults(d); DB.updatedAt = ts || Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} try { applyLang(); render(); } catch (e) {} }
+async function syncCall(path, body) { const c = new AbortController(), tm = setTimeout(() => c.abort(), 20000); try { const r = await fetch(AI_URL + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: c.signal }); if (!r.ok) return null; return await r.json(); } catch (e) { return null; } finally { clearTimeout(tm); } }
+async function syncPush(force) { const code = syncCode(); if (!code) return false; const ts = DB.updatedAt || Date.now(); if (!force && ts === _lastPush) return true; const r = await syncCall("/sync-put", { code, ts, data: DB }); if (r && r.ok) { _lastPush = ts; localStorage.setItem("mindly.syncok", String(Date.now())); return true; } return false; }
+window.syncSoon = function () { if (!syncCode()) return; clearTimeout(_syncT); _syncT = setTimeout(() => syncPush(false), 6000); };
+async function syncPull(manual) { const code = syncCode(); if (!code || Date.now() - _lastPull < 15000 && !manual) return null; _lastPull = Date.now(); const r = await syncCall("/sync-get", { code }); if (!r) return null; if (r.ts && r.data && validDB(r.data) && r.ts > (DB.updatedAt || 0) + 500) { adoptDB(r.data, r.ts); _lastPush = r.ts; localStorage.setItem("mindly.syncok", String(Date.now())); return "pulled"; } if ((DB.updatedAt || 0) > (r.ts || 0)) { await syncPush(true); return "pushed"; } return "same"; }
+function exportBackup() { const blob = new Blob([JSON.stringify(DB, null, 1)], { type: "application/json" }), a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mindly-backup-" + today() + ".json"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); toast(S("Backup file created.", "تم إنشاء ملف النسخة الاحتياطية.")); }
+function importBackupFile(f) { const rd = new FileReader(); rd.onload = () => { let d; try { d = JSON.parse(rd.result); } catch (e) { d = null; } if (!validDB(d)) { toast(S("That file is not a Mindly backup.", "هذا الملف مش نسخة Mindly.")); return; } if (!confirm(S("Replace the data on this device with the backup? Your current data is kept as a safety copy.", "تستبدل بيانات هذا الجهاز بالنسخة؟ بياناتك الحالية بتنحفظ كنسخة أمان."))) return; adoptDB(d, Date.now()); save(); toast(S("Backup restored.", "تم استرجاع النسخة.")); closeSheet(); }; rd.readAsText(f); }
+function syncBlock() {
+  const code = syncCode(), ok = +localStorage.getItem("mindly.syncok") || 0;
+  return '<div class="m" style="margin-top:14px"><b>' + S("Backup & sync", "النسخ الاحتياطي والمزامنة") + '</b></div>' +
+    (code ? '<div class="m">' + S("Sync is ON. Your sync code (keep it private, it is the key to your data):", "المزامنة شغالة. كود المزامنة (خليه سري، هو مفتاح بياناتك):") + '</div><div style="font:600 15px ui-monospace,monospace;letter-spacing:1px;margin:6px 0;user-select:all" dir="ltr" id="scode">' + code + '</div><div class="m" id="sst">' + (ok ? S("Last synced ", "آخر مزامنة ") + new Date(ok).toLocaleTimeString() : "") + '</div><div class="acts"><button class="btn" id="scp">' + S("Copy code", "نسخ الكود") + '</button><button class="btn" id="snow">' + S("Sync now", "زامن الآن") + '</button><button class="btn d" id="soff">' + S("Turn off", "إيقاف") + '</button></div>'
+      : '<div class="m">' + S("Keep your data safe and use it on other devices. No account: a private code is the key.", "احفظ بياناتك واستخدمها على أجهزة تانية. بدون حساب: كود خاص هو المفتاح.") + '</div><div class="acts"><button class="btn p" id="son">' + S("Turn on sync", "تشغيل المزامنة") + '</button></div><div class="m" style="margin-top:8px">' + S("Already have a code from another device?", "عندك كود من جهاز تاني؟") + '</div><div class="acts"><input id="sin" dir="ltr" placeholder="XXXXX-XXXXX-XXXXX-XXXXX" style="flex:1;min-width:0"><button class="btn" id="sgo">' + S("Connect", "اتصال") + '</button></div>') +
+    '<div class="acts" style="margin-top:10px"><button class="btn" id="bex">' + S("Export backup file", "تصدير نسخة احتياطية") + '</button><button class="btn" id="bim">' + S("Import backup file", "استيراد نسخة") + '</button><input type="file" id="bfile" accept=".json,application/json" style="display:none"></div>';
+}
+function bindSync() {
+  const d = $("#dlg"); if (!d) return; const box = d.querySelector("#syncbox"); const re = () => { box.innerHTML = syncBlock(); bindSync(); };
+  const q = s => box.querySelector(s);
+  if (q("#son")) q("#son").onclick = async () => { localStorage.setItem(SYNCKEY, genSyncCode()); re(); const ok = await syncPush(true); toast(ok ? S("Sync is on. Save your code somewhere safe.", "المزامنة شغالة. احفظ الكود بمكان آمن.") : S("Couldn’t reach the server. Will retry.", "ما قدرت أوصل للسيرفر. رح أعيد المحاولة.")); re(); };
+  if (q("#sgo")) q("#sgo").onclick = async () => { const c = q("#sin").value.trim().toUpperCase().replace(/[^A-Z2-7]/g, "").replace(/(.{5})(?=.)/g, "$1-"); if (c.length < 23) { toast(S("That code looks too short.", "الكود قصير.")); return; } const r = await syncCall("/sync-get", { code: c }); if (!r) { toast(S("Couldn’t reach the server.", "ما قدرت أوصل للسيرفر.")); return; } if (!r.ts || !r.data || !validDB(r.data)) { toast(S("No data found for that code.", "ما لقيت بيانات لهذا الكود.")); return; } if (!confirm(S("Replace the data on this device with the synced copy? Your current data is kept as a safety copy.", "تستبدل بيانات هذا الجهاز بالنسخة المتزامنة؟ بياناتك الحالية بتنحفظ كنسخة أمان."))) return; localStorage.setItem(SYNCKEY, c); adoptDB(r.data, r.ts); _lastPush = r.ts; localStorage.setItem("mindly.syncok", String(Date.now())); toast(S("Connected. Data loaded.", "تم الاتصال وتحميل البيانات.")); closeSheet(); };
+  if (q("#scp")) q("#scp").onclick = () => { const t = syncCode(); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(S("Code copied.", "تم النسخ.")), () => toast(S("Select the code and copy it.", "حدد الكود وانسخه."))); };
+  if (q("#snow")) q("#snow").onclick = async () => { q("#sst").textContent = "…"; const r = await syncPull(true); await syncPush(true); toast(r ? S("Synced.", "تمت المزامنة.") : S("Couldn’t reach the server.", "ما قدرت أوصل للسيرفر.")); re(); };
+  if (q("#soff")) q("#soff").onclick = () => { if (confirm(S("Turn off sync on this device? Your data stays here and on the server.", "توقف المزامنة على هذا الجهاز؟ بياناتك تبقى هنا وعلى السيرفر."))) { localStorage.removeItem(SYNCKEY); re(); } };
+  q("#bex").onclick = exportBackup; q("#bim").onclick = () => q("#bfile").click(); q("#bfile").onchange = e => { if (e.target.files[0]) importBackupFile(e.target.files[0]); };
+}
+const _settings0 = settingsSheet;
+settingsSheet = function () { _settings0(); const d = $("#dlg"); if (!d) return; const acts = d.querySelector(".acts"); const box = document.createElement("div"); box.id = "syncbox"; acts.parentNode.insertBefore(box, acts); box.innerHTML = syncBlock(); bindSync(); };
+$("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
+if (syncCode()) { syncPull(true); document.addEventListener("visibilitychange", () => { if (!document.hidden) syncPull(false); }); window.addEventListener("pagehide", () => { if (syncCode()) syncPush(false); }); }
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 
 /* ============================================================
@@ -1036,4 +1080,4 @@ if (location.hash === "#voice") openVoiceScreen();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { /* offline cache optional */ }
 </script>
 </body>
-        </html>
+  </html>
