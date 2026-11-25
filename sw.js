@@ -1,4 +1,4 @@
-const V = "mindly-v27"; const CORE = ["./", "./index.html", "./manifest.webmanifest"];
+const V = "mindly-v28"; const CORE = ["./", "./index.html", "./manifest.webmanifest"];
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(V).then(c => c.addAll(CORE.map(u => new Request(u, { cache: "reload" })))).catch(() => {})); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener("message", e => { if (e.data === "skipWaiting") self.skipWaiting(); });
