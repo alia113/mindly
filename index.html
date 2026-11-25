@@ -734,6 +734,110 @@ $("#vmic").onclick = () => {
   setConvo(true); startListen();
 };
 $("#vend").onclick = () => { endConvo(); closeVoiceScreen(); }; $("#vmute").onclick = () => { DB.settings.mute = !DB.settings.mute; save(); syncMute(); };
+/* ---- natural voice: cloud TTS + cloud STT via the Worker, loop kept; falls back to browser speech ---- */
+V.cloud = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+V.cloudBroken = false; V.ttsBroken = false; V.sttFail = 0; V.ttsFail = 0; V.rc = null; V.mic = null; V.msrc = null; V.cp = 0; V.out = null;
+function ensureOut() {
+  if (!V.out) { V.out = new (window.AudioContext || window.webkitAudioContext)(); V.oan = V.out.createAnalyser(); V.oan.fftSize = 512; V.oan.connect(V.out.destination); V.obuf = new Uint8Array(512); }
+  if (V.out.state !== "running") V.out.resume().catch(() => {}); return V.out;
+}
+const _unlock = unlockSpeech;
+unlockSpeech = function () { if (V.cloud) { try { ensureOut(); if (!V.cunlocked) { const b = V.out.createBuffer(1, 1, 22050), s = V.out.createBufferSource(); s.buffer = b; s.connect(V.out.destination); s.start(0); V.cunlocked = true; } } catch (e) { V.cloud = false; } } _unlock(); };
+async function getMic() {
+  if (V.mic && V.mic.getTracks().some(t => t.readyState === "live")) { ensureOut(); return V.mic; }
+  V.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  ensureOut(); try { if (V.msrc) V.msrc.disconnect(); } catch (e) {}
+  V.msrc = V.out.createMediaStreamSource(V.mic); V.an = V.out.createAnalyser(); V.an.fftSize = 512; V.an.smoothingTimeConstant = .5; V.msrc.connect(V.an); V.buf = new Uint8Array(V.an.fftSize); return V.mic;
+}
+function releaseMic() { try { if (V.mic) V.mic.getTracks().forEach(t => t.stop()); } catch (e) {} V.mic = null; try { if (V.msrc) V.msrc.disconnect(); } catch (e) {} V.msrc = null; V.an = null; }
+function stopRec() { if (V.rc && V.rc.stop) V.rc.stop(true); V.rc = null; }
+function stopCloudPlay() { V.cp++; if (V.csrc) { try { V.csrc.onended = null; V.csrc.stop(); } catch (e) {} V.csrc = null; } clearInterval(V.ptick); V.speaking = false; }
+const _stl2 = stopListen; stopListen = function (s) { stopRec(); _stl2(s); };
+const _sc = setConvo; setConvo = function (on) { _sc(on); if (!on) { stopRec(); stopCloudPlay(); releaseMic(); } };
+const _ec2 = endConvo; endConvo = function () { stopRec(); stopCloudPlay(); _ec2(); };
+const _sl = startListen; startListen = function () { if (V.cloud && !V.cloudBroken) return listenCloud(); return _sl(); };
+const _sp = speak; speak = function (text, lang, fromHome, done) { if (V.cloud && !V.ttsBroken) return speakCloud(text, lang, fromHome, done); return _sp(text, lang, fromHome, done); };
+function b64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192)); return btoa(s); }
+function toWav16k(parts, sr) {
+  let n = 0; for (const p of parts) n += p.length; const all = new Float32Array(n); let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
+  const r = sr / 16000, m = Math.floor(n / r), pcm = new Int16Array(m);
+  for (let i = 0; i < m; i++) { let a = Math.floor(i * r), b = Math.max(a + 1, Math.floor((i + 1) * r)), s = 0; for (let k = a; k < b && k < n; k++) s += all[k]; let v = s / (b - a); v = Math.max(-1, Math.min(1, v)); pcm[i] = v < 0 ? v * 32768 : v * 32767; }
+  const h = new DataView(new ArrayBuffer(44)), w = (p, t) => { for (let i = 0; i < t.length; i++) h.setUint8(p + i, t.charCodeAt(i)); };
+  w(0, "RIFF"); h.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVEfmt "); h.setUint32(16, 16, true); h.setUint16(20, 1, true); h.setUint16(22, 1, true); h.setUint32(24, 16000, true); h.setUint32(28, 32000, true); h.setUint16(32, 2, true); h.setUint16(34, 16, true); w(36, "data"); h.setUint32(40, pcm.length * 2, true);
+  const out = new Uint8Array(44 + pcm.length * 2); out.set(new Uint8Array(h.buffer)); out.set(new Uint8Array(pcm.buffer), 44); return out;
+}
+async function sttCloud(wav) {
+  for (let a = 0; a < 2; a++) {
+    const c = new AbortController(), tm = setTimeout(() => c.abort(), 15000);
+    try { const r = await fetch(AI_URL + "/stt", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ audio: b64(wav), mime: "audio/wav", lang: DB.settings.lang === "ar" ? "ar" : "en" }), signal: c.signal }); if (r.ok) { const j = await r.json(); return String(j.text || "").trim(); } } catch (e) {} finally { clearTimeout(tm); }
+    await new Promise(z => setTimeout(z, 400));
+  }
+  return null;
+}
+async function listenCloud() {
+  const turn = V.turn; stopCloudPlay(); if ("speechSynthesis" in window) speechSynthesis.cancel();
+  try { await getMic(); } catch (e) { setConvo(false); setState("idle"); toast("Microphone blocked. Allow it in the browser, or type instead."); $("#vtext").classList.add("on"); return; }
+  if (V.turn !== turn || !V.active) return;
+  const ctx = V.out, sp = ctx.createScriptProcessor(4096, 1, 1), mute = ctx.createGain(); mute.gain.value = 0;
+  V.msrc.connect(sp); sp.connect(mute); mute.connect(ctx.destination);
+  const sr = ctx.sampleRate; let parts = [], started = false, voiced = 0, lastV = 0, t0 = performance.now(), floor = 0, calMs = 0, fin = false;
+  const ctl = { stop: null }; V.rc = ctl; setState("listening"); setTx("");
+  const finish = async discard => {
+    if (fin) return; fin = true; sp.onaudioprocess = null; try { V.msrc.disconnect(sp); } catch (e) {} try { sp.disconnect(); mute.disconnect(); } catch (e) {} if (V.rc === ctl) V.rc = null;
+    if (discard || V.turn !== turn || !V.active) return;
+    const empty = () => { setState("idle"); if (!V.convo) return; if (++V.empty >= 4) { setConvo(false); toast("Still here. Tap the mic to talk again."); return; } backToListening(100); };
+    if (!started) { empty(); return; }
+    setState("thinking"); setTx("…");
+    const text = await sttCloud(toWav16k(parts, sr)); parts = [];
+    if (V.turn !== turn || !V.active) return;
+    if (text === null) { if (++V.sttFail >= 2) { V.cloudBroken = true; toast("Switching to your phone’s built-in recognition."); } else toast("Couldn’t hear that. Try again."); backToListening(300); return; }
+    V.sttFail = 0; if (text.replace(/[^\p{L}\p{N}]/gu, "").length < 2) { empty(); return; }
+    V.empty = 0; handle(text);
+  };
+  ctl.stop = finish;
+  sp.onaudioprocess = e => {
+    if (fin) return; const d = e.inputBuffer.getChannelData(0), now = performance.now(), dur = d.length / sr * 1000; parts.push(new Float32Array(d));
+    let s = 0; for (let i = 0; i < d.length; i++) s += d[i] * d[i]; const rms = Math.sqrt(s / d.length);
+    if (calMs < 500) { floor = (floor * calMs + rms * dur) / (calMs + dur); calMs += dur; } const thr = Math.max(.02, floor * 3);
+    if (!started && parts.length > 5) parts.shift();
+    if (rms > thr && calMs >= 300) { voiced += dur; lastV = now; if (voiced >= 170 && !started) { started = true; setTx("…"); } }
+    if ((started && now - lastV > 1300) || now - t0 > 25000 || (!started && now - t0 > 10000)) finish(false);
+  };
+}
+function startPulse() { clearInterval(V.ptick); V.ptick = setInterval(() => { try { V.oan.getByteTimeDomainData(V.obuf); let s = 0; for (let i = 0; i < V.obuf.length; i++) { const x = (V.obuf[i] - 128) / 128; s += x * x; } V.pulse = Math.min(1, Math.sqrt(s / V.obuf.length) * 5); } catch (e) {} }, 50); }
+async function ttsFetch(text) {
+  const c = new AbortController(), tm = setTimeout(() => c.abort(), 20000);
+  try {
+    const r = await fetch(AI_URL + "/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice: DB.settings.voice || "Kore" }), signal: c.signal }); if (!r.ok) return null; const j = await r.json(); if (!j.audio) return null;
+    const bin = atob(j.audio), off = bin.slice(0, 4) === "RIFF" ? 44 : 0, n = (bin.length - off) >> 1, f = new Float32Array(n);
+    for (let i = 0; i < n; i++) { let v = bin.charCodeAt(off + 2 * i) | (bin.charCodeAt(off + 2 * i + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
+    const m = /rate=(\d+)/i.exec(j.mime || ""), buf = V.out.createBuffer(1, n, m ? +m[1] : 24000); buf.copyToChannel(f, 0); return buf;
+  } catch (e) { return null; } finally { clearTimeout(tm); }
+}
+function splitSpeech(text) {
+  const clean = text.replace(/[•*_#]/g, " ").replace(/\s+/g, " ").trim(); const parts = (clean.match(/[^.!?؟۔\n]+[.!?؟۔]*/g) || [clean]).map(s => s.trim()).filter(Boolean); const ch = []; let cur = "";
+  for (const p of parts) { if (!ch.length && !cur) { cur = p; if (cur.length > 90 || true) { ch.push(cur); cur = ""; } continue; } if ((cur + " " + p).length > 230 && cur) { ch.push(cur); cur = p; } else cur = cur ? cur + " " + p : p; } if (cur) ch.push(cur); return ch;
+}
+function speakCloud(text, lang, fromHome, done) {
+  ensureOut(); if ("speechSynthesis" in window) speechSynthesis.cancel(); stopCloudPlay(); const my = V.cp; V.wd++;
+  const chunks = splitSpeech(text), jobs = []; const start = i => { if (i < chunks.length && !jobs[i]) jobs[i] = ttsFetch(chunks[i]); }; start(0); start(1);
+  (async () => {
+    for (let i = 0; i < chunks.length; i++) {
+      const buf = await jobs[i]; start(i + 2); if (V.cp !== my) return;
+      if (!buf) { if (++V.ttsFail >= 3) V.ttsBroken = true; if (i === 0) toast("Using the phone’s built-in voice this time."); return _sp(chunks.slice(i).join(" "), lang, fromHome, done); }
+      V.ttsFail = 0;
+      await new Promise(res => { const s = V.out.createBufferSource(); s.buffer = buf; s.connect(V.oan); V.csrc = s; s.onended = () => res(); V.speaking = true; if (V.active && !fromHome) setState("speaking"); startPulse(); s.start(); });
+      if (V.cp !== my) return;
+    }
+    V.speaking = false; clearInterval(V.ptick); V.csrc = null; if (done) done(); else if (V.active && !fromHome) setState("idle");
+  })();
+}
+$("#vmic").onclick = () => {
+  unlockSpeech();
+  if (V.state === "speaking" || V.state === "thinking" && V.speaking) { V.wd++; stopCloudPlay(); if ("speechSynthesis" in window) speechSynthesis.cancel(); V.speaking = false; if (!V.convo) setConvo(true); startListen(); return; }
+  if (V.convo) { endConvo(); return; }
+  setConvo(true); startListen();
+};
 $("#vkb").onclick = () => { $("#vtext").classList.toggle("on"); if ($("#vtext").classList.contains("on")) $("#vin").focus(); };
 const sendText = () => { const t = $("#vin").value.trim(); if (!t) return; $("#vin").value = ""; handle(t); }; $("#vsend").onclick = sendText; $("#vin").onkeydown = e => { if (e.key === "Enter") sendText(); };
 $("#vlang").onclick = () => setLang(DB.settings.lang === "ar" ? "en" : "ar");
