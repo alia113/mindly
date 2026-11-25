@@ -125,11 +125,11 @@ nav.bar{touch-action:none;-webkit-user-select:none;user-select:none;background:l
 nav.bar button{color:rgba(255,255,255,.88)}nav.bar button.on{color:#fff}
 nav.bar .lens{background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.22));will-change:left,width,transform}
 nav.bar .lens.drag{transition:width .15s,transform .25s cubic-bezier(.34,1.56,.5,1)!important}
-nav.bar .lens.press{transform:scale(1.14,1.08)}
+nav.bar .lens.press{transform:scale(1.08,1.05)}
 nav.bar{background:linear-gradient(180deg,rgba(255,255,255,.12),rgba(255,255,255,.03))!important;-webkit-backdrop-filter:blur(22px) saturate(2.6) brightness(1.25)!important;backdrop-filter:blur(22px) saturate(2.6) brightness(1.25)!important;border-color:rgba(255,255,255,.3)!important}
 nav.bar .lens{overflow:hidden;background:linear-gradient(180deg,rgba(255,255,255,.34),rgba(255,255,255,.12))!important;border:1px solid rgba(255,255,255,.55)!important;box-shadow:inset 0 1.5px 0 rgba(255,255,255,.85),inset 0 -2px 6px rgba(255,255,255,.25),0 4px 14px rgba(0,0,0,.25),0 0 0 .5px rgba(255,255,255,.2)!important}
 nav.bar .lens .lc{position:absolute;top:-6px;display:flex;justify-content:space-between;align-items:center;gap:2px;padding:5px;box-sizing:border-box;pointer-events:none}
-nav.bar .lens .lc button{flex:1;min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;gap:3px;padding:6px 2px;color:#fff;background:none;box-shadow:none;transform:scale(1.2);text-shadow:0 0 8px rgba(255,255,255,.4)}
+nav.bar .lens .lc button{flex:1;min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;gap:3px;padding:6px 2px;color:#fff;background:none;box-shadow:none;transform:scale(1.15);text-shadow:0 0 8px rgba(255,255,255,.4)}
 nav.bar .lens .lc .vb{visibility:hidden;flex:0 0 52px}
 nav.bar .lens.drag .lc{transition:none!important}
 nav.bar .lens .lc svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -1244,7 +1244,7 @@ addEventListener("resize", () => moveLens(false)); renderNav(); setTimeout(() =>
 (function () { const nav = $("#nav"); let dg = null;
   const L = () => nav.querySelector(".lens");
   nav.addEventListener("pointerdown", e => { const b = e.target.closest("button[data-v]"); const l = L(); if (!b || !l) return; dg = { x0: e.clientX, moved: false, lx: e.clientX, v: 0 }; l.classList.add("press"); try { nav.setPointerCapture(e.pointerId); } catch (z) {} });
-  nav.addEventListener("pointermove", e => { if (!dg) return; const l = L(); if (!l) return; if (!dg.moved && Math.abs(e.clientX - dg.x0) > 6) { dg.moved = true; l.classList.add("drag"); } if (!dg.moved) return; const r = nav.getBoundingClientRect(), w = l.offsetWidth; let x = e.clientX - r.left - w / 2; x = Math.max(3, Math.min(r.width - w - 3, x)); const v = Math.min(Math.abs(e.clientX - dg.lx), 30); dg.lx = e.clientX; l.style.left = x + "px"; { const lc = l.querySelector(".lc"); if (lc) { lc.style.width = nav.clientWidth + "px"; lc.style.transition = "none"; lc.style.left = -(x + 1) + "px"; } } l.style.transform = "scale(" + (1.14 + v * 0.006) + "," + (1.08 - v * 0.002) + ")"; });
+  nav.addEventListener("pointermove", e => { if (!dg) return; const l = L(); if (!l) return; if (!dg.moved && Math.abs(e.clientX - dg.x0) > 6) { dg.moved = true; l.classList.add("drag"); } if (!dg.moved) return; const r = nav.getBoundingClientRect(), w = l.offsetWidth; let x = e.clientX - r.left - w / 2; x = Math.max(3, Math.min(r.width - w - 3, x)); const v = Math.min(Math.abs(e.clientX - dg.lx), 30); dg.lx = e.clientX; l.style.left = x + "px"; { const lc = l.querySelector(".lc"); if (lc) { lc.style.width = nav.clientWidth + "px"; lc.style.transition = "none"; lc.style.left = -(x + 1) + "px"; } } l.style.transform = "scale(" + (1.08 + v * 0.004) + "," + (1.05 - v * 0.0015) + ")"; });
   const end = e => { if (!dg) return; const l = L(), d = dg; dg = null; if (!l) return; l.classList.remove("press"); l.style.transform = ""; if (!d.moved) { l.classList.remove("drag"); return; } l.classList.remove("drag"); const lc = l.offsetLeft + l.offsetWidth / 2; let best = null, bd = 1e9; nav.querySelectorAll("button[data-v]").forEach(b => { const dd = Math.abs(b.offsetLeft + b.offsetWidth / 2 - lc); if (dd < bd) { bd = dd; best = b; } }); _lensPrev = { left: l.offsetLeft, width: l.offsetWidth }; if (best) { if (best.dataset.v !== view) best.click(); else moveLens(true); } window._noClick = true; setTimeout(() => window._noClick = false, 400); };
   nav.addEventListener("pointerup", end); nav.addEventListener("pointercancel", end);
   nav.addEventListener("click", e => { if (window._noClick) { e.stopPropagation(); e.preventDefault(); } }, true);
@@ -1291,4 +1291,4 @@ document.addEventListener("click", e => { const t = e.target.closest && e.target
 { const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
-                         </html>
+                                    </html>
