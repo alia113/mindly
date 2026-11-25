@@ -105,6 +105,19 @@ nav.bar .vb{flex:0 0 52px;width:52px;height:52px;min-height:0;margin-top:0;paddi
 nav.bar .vb.on{background:conic-gradient(from 200deg,#3b82f6,#22d3ee,#a78bfa,#ec4899,#fb923c,#3b82f6)}
 main{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
 @media(max-width:360px){nav.bar{left:8px;right:8px;padding:5px}nav.bar button{font-size:9.5px}}
+/* v16 nav: iOS-26 style liquid glass + robust bottom anchoring */
+html{height:-webkit-fill-available}body{min-height:100vh;min-height:-webkit-fill-available}
+#app{height:var(--appH,auto)}
+nav.bar{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px + var(--nbx,0px));max-width:536px;margin:0 auto;padding:5px;border-radius:36px;z-index:20;isolation:isolate;
+background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.05));-webkit-backdrop-filter:blur(10px) saturate(2.1) brightness(1.15);backdrop-filter:blur(10px) saturate(2.1) brightness(1.15);
+border:1px solid rgba(255,255,255,.22);box-shadow:0 8px 30px rgba(0,0,0,.45),inset 0 1.5px 0 rgba(255,255,255,.6),inset 0 -1px 0 rgba(255,255,255,.18),inset 1px 0 0 rgba(255,255,255,.22),inset -1px 0 0 rgba(255,255,255,.22),inset 0 0 22px rgba(255,255,255,.07)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){nav.bar{background:rgba(40,40,46,.97)}}
+nav.bar button{position:relative;z-index:1;color:rgba(255,255,255,.72)}
+nav.bar button.on{background:none;box-shadow:none;color:#fff}
+nav.bar .lens{position:absolute;z-index:0;top:5px;bottom:5px;border-radius:30px;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,.12));border:1px solid rgba(255,255,255,.35);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.65),inset 0 -6px 12px rgba(255,255,255,.08),0 2px 10px rgba(0,0,0,.25);transition:left .5s cubic-bezier(.34,1.45,.5,1),width .5s cubic-bezier(.34,1.45,.5,1),opacity .2s}
+nav.bar .vb .lens{display:none}
+main{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 96px)!important}
+@media(max-width:360px){nav.bar{left:8px;right:8px}}
 </style>
 </head>
 <body>
@@ -1142,7 +1155,7 @@ settingsSheet = function () {
   const draw = () => { const cfg = lockCfg(), st = DB.settings;
     box.innerHTML = '<div class="m" style="margin-top:14px"><b>' + S("About you", "عنك") + '</b></div><div class="acts"><input id="pname" placeholder="' + S("Your name", "اسمك") + '" value="' + (st.name || "").replace(/"/g, "&quot;") + '" style="flex:1;min-width:0"><select id="pgen"><option value="">' + S("Gender (for Arabic grammar)", "الجنس (للصياغة العربية)") + '</option><option value="m"' + (st.gender === "m" ? " selected" : "") + '>' + S("Male", "ذكر") + '</option><option value="f"' + (st.gender === "f" ? " selected" : "") + '>' + S("Female", "أنثى") + '</option></select></div>' +
       '<div class="m" style="margin-top:14px"><b>' + S("App lock", "قفل التطبيق") + '</b></div>' + (cfg ? '<div class="m">' + S("Lock is ON (locks when you come back after 45 seconds away).", "القفل شغال (يقفل لما ترجع بعد 45 ثانية).") + '</div><div class="acts">' + (cfg.bio ? "" : '<button class="btn" id="lbio">' + S("Add Face ID / Touch ID", "إضافة البصمة") + '</button>') + '<button class="btn" id="lnow">' + S("Lock now", "اقفل الآن") + '</button><button class="btn d" id="loff">' + S("Turn off", "إيقاف") + '</button></div>' : '<div class="acts"><input id="lpin" type="password" inputmode="numeric" maxlength="8" placeholder="' + S("New PIN (4 to 8 digits)", "رقم سري (4-8 أرقام)") + '" style="flex:1;min-width:0"><button class="btn p" id="lset">' + S("Set PIN", "تعيين") + '</button></div>') +
-      '<div class="m" style="margin-top:14px"><b>' + S("Privacy", "الخصوصية") + '</b></div><div class="m" style="line-height:1.5">' + S("Your memory is stored on this device. When you chat or talk, your text and voice are sent through Mindly’s server to Google Gemini to answer you (on the free tier Google may use them to improve its models). Nothing is sold, there are no accounts or ads. If you turn on sync, your data is encrypted on your device before upload, so the server cannot read it. If you lose the sync code, the synced copy cannot be recovered. The app lock hides the app, it does not encrypt data stored on the device.", "ذاكرتك محفوظة على هذا الجهاز. لما تكتب أو تحكي، النص والصوت بينرسلوا عبر سيرفر Mindly إلى Google Gemini ليجاوبك (بالنسخة المجانية ممكن Google تستخدمهم لتحسين نماذجها). ما في بيع بيانات ولا حسابات ولا إعلانات. لو شغلت المزامنة، بياناتك بتتشفر على جهازك قبل الرفع فالسيرفر ما يقدر يقرأها. لو ضاع كود المزامنة ما فيه استرجاع للنسخة. قفل التطبيق يخفي التطبيق لكنه ما يشفر البيانات المخزنة على الجهاز.") + '</div>';
+      '<div class="m" style="margin-top:14px"><b>' + S("Privacy", "الخصوصية") + '</b></div><div class="m" style="line-height:1.5">' + S("Your memory is stored on this device. When you chat or talk, your text and voice are sent through Mindly’s server to Google Gemini to answer you (on the free tier Google may use them to improve its models). Nothing is sold, there are no accounts or ads. If you turn on sync, your data is encrypted on your device before upload, so the server cannot read it. If you lose the sync code, the synced copy cannot be recovered. If you turn on reminders, the reminder text and time are stored on Mindly’s server (not encrypted) until delivered, together with your browser’s push address. The app lock hides the app, it does not encrypt data stored on the device.", "ذاكرتك محفوظة على هذا الجهاز. لما تكتب أو تحكي، النص والصوت بينرسلوا عبر سيرفر Mindly إلى Google Gemini ليجاوبك (بالنسخة المجانية ممكن Google تستخدمهم لتحسين نماذجها). ما في بيع بيانات ولا حسابات ولا إعلانات. لو شغلت المزامنة، بياناتك بتتشفر على جهازك قبل الرفع فالسيرفر ما يقدر يقرأها. لو ضاع كود المزامنة ما فيه استرجاع للنسخة. لو شغلت التذكيرات، نص التذكير ووقته بينحفظوا على سيرفر Mindly (بدون تشفير) لحد ما يوصلوا، مع عنوان الإشعارات للمتصفح. قفل التطبيق يخفي التطبيق لكنه ما يشفر البيانات المخزنة على الجهاز.") + '</div>';
     const q = s => box.querySelector(s);
     q("#pname").onchange = e => { DB.settings.name = e.target.value.trim().slice(0, 40); save(); }; q("#pgen").onchange = e => { DB.settings.gender = e.target.value; save(); };
     if (q("#lset")) q("#lset").onclick = async () => { const p = q("#lpin").value; if (!/^\d{4,8}$/.test(p)) { toast(S("PIN must be 4 to 8 digits.", "الرقم لازم 4 إلى 8 أرقام.")); return; } const s = _b64e(crypto.getRandomValues(new Uint8Array(16))); localStorage.setItem(LK, JSON.stringify({ s, h: await pinHash(p, s), bio: null })); toast(S("Lock is on.", "تم تشغيل القفل.")); draw(); };
@@ -1152,6 +1165,61 @@ settingsSheet = function () {
   }; draw();
 };
 $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
+/* ---- v16: reminders (web push + local) ---- */
+const VAPID_KEY = "BEzIW0_HcknnmC5c7Aeh9YqOxs2h93m6zuKLf-BwdGBQzmmSk-iHX0NNZ7Cp-ocXYV-GxbbFAmjCWtaZYOsqwKs";
+const PUSHK = "mindly.push";
+const pushSub = () => { try { return JSON.parse(localStorage.getItem(PUSHK) || "null"); } catch (e) { return null; } };
+function parseHM(t) { if (!t) return null; const m = String(t).match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|ص|م)?/i); if (!m) return null; let h = +m[1], mi = +(m[2] || 0); const ap = (m[3] || "").toLowerCase(); if ((ap === "pm" || ap === "م") && h < 12) h += 12; if ((ap === "am" || ap === "ص") && h === 12) h = 0; return h > 23 || mi > 59 ? null : [h, mi]; }
+function atLocal(date, hm) { const p = String(date).split("-").map(Number); if (p.length < 3 || p.some(isNaN)) return 0; return new Date(p[0], p[1] - 1, p[2], hm[0], hm[1]).getTime(); }
+function reminderItems() {
+  const now = Date.now(), out = []; const add = (id, at, b) => { if (at > now - 60000 && at < now + 120 * 864e5) out.push({ id: id + ":" + at, at, b: String(b).slice(0, 140) }); };
+  DB.commitments.filter(c => c.status !== "done" && c.due).forEach(c => add("c" + c.id, atLocal(c.due, [9, 0]), (c.owner === "me" ? S("Due today: ", "موعده اليوم: ") : S("Expected today: ", "متوقع اليوم: ")) + c.title + (c.personName ? " · " + c.personName : "")));
+  DB.tasks.filter(k => k.status === "open" && k.due).forEach(k => add("t" + k.id, atLocal(k.due, [9, 0]), S("Task due today: ", "مهمة موعدها اليوم: ") + k.title));
+  DB.events.forEach(e => { if (!e.date) return; const hm = parseHM(e.time); if (hm) add("e" + e.id, atLocal(e.date, hm) - 30 * 60000, S("In 30 min: ", "بعد 30 دقيقة: ") + e.title); else add("e" + e.id, atLocal(e.date, [9, 0]), S("Today: ", "اليوم: ") + e.title); });
+  (DB.reminders || []).forEach(r => add("r" + r.id, r.at, r.text));
+  return out.sort((a, b) => a.at - b.at).slice(0, 100);
+}
+async function pushPost(path, body) { try { const r = await fetch(AI_URL + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); return r.ok ? await r.json() : null; } catch (e) { return null; } }
+let _pushT = null, _pushH = "";
+function pushSoon() { if (!pushSub()) return; clearTimeout(_pushT); _pushT = setTimeout(() => pushSyncNow(false), 20000); }
+async function pushSyncNow(force) { const sub = pushSub(); if (!sub) return false; const items = reminderItems(); const h = JSON.stringify(items.map(i => i.id + i.b)); if (!force && h === _pushH) return true; const r = await pushPost("/push-set", { sub, items }); if (r && r.ok) { _pushH = h; return true; } return false; }
+{ const _ss = window.syncSoon; window.syncSoon = function () { try { pushSoon(); } catch (e) {} if (_ss) return _ss.apply(this, arguments); }; }
+const _u8 = b => { const s = (b + "=".repeat((4 - b.length % 4) % 4)).split("-").join("+").split("_").join("/"); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+async function enablePush() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  if (ios && !standalone) return "install";
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+  const perm = await Notification.requestPermission(); if (perm !== "granted") return "denied";
+  try { const reg = await navigator.serviceWorker.ready; let sub = await reg.pushManager.getSubscription(); if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _u8(VAPID_KEY) }); localStorage.setItem(PUSHK, JSON.stringify(sub.toJSON())); } catch (e) { return "error"; }
+  return (await pushSyncNow(true)) ? "ok" : "server";
+}
+async function disablePush() { const sub = pushSub(); try { const reg = await navigator.serviceWorker.ready; const s = await reg.pushManager.getSubscription(); if (s) await s.unsubscribe(); } catch (e) {} if (sub) await pushPost("/push-off", { sub }); localStorage.removeItem(PUSHK); }
+/* local fallback while the app is open (same tag as push, so no duplicates) */
+setInterval(async () => { try { if (!("Notification" in window) || Notification.permission !== "granted") return; const shown = JSON.parse(localStorage.getItem("mindly.shown") || "{}"), now = Date.now(); let ch = false; for (const it of reminderItems()) { if (it.at <= now && !shown[it.id]) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.showNotification("Mindly", { body: it.b, tag: it.id, data: { url: "./index.html" } }); shown[it.id] = now; ch = true; } } for (const k in shown) if (shown[k] < now - 3 * 864e5) { delete shown[k]; ch = true; } if (ch) localStorage.setItem("mindly.shown", JSON.stringify(shown)); } catch (e) {} }, 30000);
+function addReminder(text, at) { DB.reminders = DB.reminders || []; DB.reminders.push({ id: "r" + Date.now().toString(36), text: String(text).slice(0, 120), at }); save(); }
+const _settings2 = settingsSheet;
+settingsSheet = function () {
+  _settings2(); const d = $("#dlg"); if (!d) return; const anchor = d.querySelector("#profbox") || d.querySelector("#syncbox") || d.querySelector(".acts"); const box = document.createElement("div"); box.id = "rembox"; anchor.parentNode.insertBefore(box, anchor);
+  const draw = (msg) => { const on = !!pushSub(), perm = ("Notification" in window) ? Notification.permission : "n/a", n = reminderItems().length;
+    box.innerHTML = '<div class="m" style="margin-top:14px"><b>' + S("Reminders", "التذكيرات") + '</b></div><div class="m">' + (on ? S("Notifications are ON. You get a reminder at 9:00 on the due date, and 30 minutes before a meeting that has a time. Upcoming reminders: ", "الإشعارات شغالة. بوصلك تذكير الساعة 9:00 يوم الموعد، وقبل الاجتماع بنص ساعة إذا إله وقت. تذكيرات جاية: ") + n : S("Get a notification when something is due. On iPhone this works from the Home Screen app (Share, Add to Home Screen).", "استلم إشعار لما يحين موعد شي. على الآيفون بيشتغل من تطبيق الشاشة الرئيسية (مشاركة، إضافة إلى الشاشة الرئيسية).")) + '</div>' + (msg ? '<div class="m" style="color:#fdba74">' + msg + '</div>' : "") +
+      '<div class="acts">' + (on ? '<button class="btn" id="rtest">' + S("Send test", "إشعار تجريبي") + '</button><button class="btn d" id="roff">' + S("Turn off", "إيقاف") + '</button>' : '<button class="btn p" id="ron">' + S("Turn on notifications", "تشغيل الإشعارات") + '</button>') + '</div>' +
+      '<div class="acts"><input id="rtext" placeholder="' + S("Remind me to…", "ذكرني بـ…") + '" style="flex:1;min-width:100%"><input id="rwhen" type="datetime-local" style="flex:1"><button class="btn" id="radd">' + S("Add", "إضافة") + '</button></div>';
+    const q = s => box.querySelector(s);
+    if (q("#ron")) q("#ron").onclick = async () => { const r = await enablePush(); draw({ ok: "", install: S("On iPhone, first add Mindly to your Home Screen, then open it from there and try again.", "على الآيفون: أضف Mindly للشاشة الرئيسية أولاً، افتحه من هناك وجرب مرة ثانية."), unsupported: S("This browser does not support push notifications.", "هذا المتصفح ما بيدعم الإشعارات."), denied: S("Notifications are blocked. Allow them in your phone settings for Mindly.", "الإشعارات محظورة. اسمح بها من إعدادات الجوال لـ Mindly."), error: S("Could not subscribe. Try again.", "ما قدرت أفعّل. جرب مرة ثانية."), server: S("Subscribed, but the server could not be reached. It will retry.", "تم التفعيل لكن ما قدرت أوصل للسيرفر. رح أعيد المحاولة.") }[r] || ""); };
+    if (q("#roff")) q("#roff").onclick = async () => { await disablePush(); draw(); };
+    if (q("#rtest")) q("#rtest").onclick = async () => { const r = await pushPost("/push-test", { sub: pushSub(), text: S("Notifications work.", "الإشعارات شغالة.") }); draw(r && r.ok ? S("Test sent. It should arrive in a few seconds.", "انرسل إشعار تجريبي، لازم يوصل خلال ثواني.") : S("Test failed (status " + (r ? r.status : "no connection") + ").", "فشل الاختبار.")); };
+    if (q("#radd")) q("#radd").onclick = () => { const t = q("#rtext").value.trim(), w = q("#rwhen").value; if (!t || !w) { toast(S("Add text and a time.", "اكتب النص والوقت.")); return; } const at = new Date(w).getTime(); if (!(at > Date.now())) { toast(S("Pick a time in the future.", "اختر وقت بالمستقبل.")); return; } addReminder(t, at); q("#rtext").value = ""; draw(S("Reminder added.", "تمت إضافة التذكير.")); if (!pushSub()) toast(S("Turn on notifications to receive it.", "شغّل الإشعارات لتستلمه.")); };
+  }; draw();
+};
+$("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
+if (pushSub()) pushSyncNow(true);
+/* ---- v16 nav: lens + viewport fix ---- */
+function fixViewport() { try { const st = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches); const sh = Math.max(screen.height, screen.width > screen.height ? 0 : screen.height); const ih = window.innerHeight; let x = 0; if (st && screen.width <= 500 && sh - ih > 1 && sh - ih < 220 && Math.abs(window.innerWidth - screen.width) < 2) x = sh - ih; document.documentElement.style.setProperty("--nbx", (-x) + "px"); document.documentElement.style.setProperty("--appH", x ? sh + "px" : "auto"); } catch (e) {} }
+fixViewport(); addEventListener("resize", fixViewport); addEventListener("orientationchange", () => setTimeout(fixViewport, 300)); addEventListener("pageshow", fixViewport);
+let _lensPrev = null;
+function placeLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); const on = nav.querySelector("button.on:not(.vb)"); if (!on) { if (l) l.style.opacity = 0; return; } if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); } const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; }; const cur = { left: on.offsetLeft + 2, width: on.offsetWidth - 4 }; if (_lensPrev && anim) { l.style.transition = "none"; set(_lensPrev); void l.offsetWidth; l.style.transition = ""; requestAnimationFrame(() => set(cur)); } else set(cur); _lensPrev = cur; }
+{ const _rn = renderNav; renderNav = function () { _rn(); placeLens(true); }; }
+addEventListener("resize", () => placeLens(false)); setTimeout(() => placeLens(false), 400);
 </script>
 </body>
   </html>
