@@ -845,6 +845,74 @@ $("#vmic").onclick = () => {
 $("#vkb").onclick = () => { $("#vtext").classList.toggle("on"); if ($("#vtext").classList.contains("on")) $("#vin").focus(); };
 const sendText = () => { const t = $("#vin").value.trim(); if (!t) return; $("#vin").value = ""; handle(t); }; $("#vsend").onclick = sendText; $("#vin").onkeydown = e => { if (e.key === "Enter") sendText(); };
 $("#vlang").onclick = () => setLang(DB.settings.lang === "ar" ? "en" : "ar");
+/* ---- Gemini Live real-time voice (falls back to the classic loop) ---- */
+V.liveBroken = false; V.liveOn = false; V.ls = null;
+const LIVE_WS = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=";
+function liveSystem() {
+  return "You are Mindly, Ali's personal voice assistant and second brain, speaking out loud in a live conversation. The user speaks casually, in Egyptian or Levantine (Shami) Arabic dialect, Modern Standard Arabic, or English, and often mixes them. Names and words may be pronounced informally or with a strong accent; listen carefully and use context to understand what was meant. Always reply in the language and dialect the user just used (Arabic dialect for dialect speech, English for English). Sound natural, warm and relaxed like a smart friend: short sentences, no lists, no reading out symbols or markdown, usually one to three sentences. If you truly did not catch something, ask briefly to repeat the specific part. Do not say you are an AI model unless asked.";
+}
+function liveSetState(s) { if (V.liveOn && V.state !== s) setState(s); }
+async function startLive() {
+  const turn = V.turn; unlockSpeech(); ensureOut(); const ctx = V.out;
+  setState("thinking"); setTx("…");
+  let token; try { const r = await fetch(AI_URL + "/live-token", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); const j = await r.json(); token = j.token; if (!token) throw 0; } catch (e) { return false; }
+  try { await getMic(); } catch (e) { setConvo(false); setState("idle"); toast("Microphone blocked. Allow it in the browser, or type instead."); $("#vtext").classList.add("on"); return "denied"; }
+  if (!V.active) return "denied";
+  const ws = new WebSocket(LIVE_WS + encodeURIComponent(token)); const S = { ws, ready: false, src: [], lt: 0, sp: null, mute: null, gate: false, lastUser: Date.now(), outTx: "", inTx: "", closed: false, opened: Date.now() }; V.ls = S;
+  const ok = await new Promise(res => {
+    const to = setTimeout(() => res(false), 9000);
+    ws.onopen = () => { ws.send(JSON.stringify({ setup: { model: "models/gemini-3.8-live", generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Sulafat" } } } }, systemInstruction: { parts: [{ text: liveSystem() }] }, inputAudioTranscription: {}, outputAudioTranscription: {}, realtimeInputConfig: { automaticActivityDetection: { startOfSpeechSensitivity: "START_SENSITIVITY_HIGH", endOfSpeechSensitivity: "END_SENSITIVITY_LOW", prefixPaddingMs: 300, silenceDurationMs: 900 } } } })); };
+    ws.onmessage = async e => { let d = e.data; if (d instanceof Blob) d = await d.text(); let m; try { m = JSON.parse(d); } catch (x) { return; } if (m.setupComplete) { clearTimeout(to); res(true); } else liveMsg(S, m); S.first = true; };
+    ws.onerror = () => { clearTimeout(to); res(false); }; ws.onclose = () => { clearTimeout(to); res(false); };
+  });
+  if (!ok || V.turn !== turn || !V.active) { try { ws.close(); } catch (e) {} V.ls = null; return ok ? "denied" : false; }
+  S.ready = true; V.liveOn = true; V.empty = 0;
+  ws.onmessage = async e => { let d = e.data; if (d instanceof Blob) d = await d.text(); let m; try { m = JSON.parse(d); } catch (x) { return; } liveMsg(S, m); };
+  ws.onclose = () => { if (S.closed) return; S.closed = true; const was = V.liveOn && V.ls === S; liveCleanup(); if (was && V.active) { if (Date.now() - S.opened < 4000) { V.liveBroken = true; toast("Live voice isn’t available right now. Using the classic voice."); setConvo(true); startListen(); } else { setConvo(false); setState("idle"); toast("Live session ended. Tap the mic to continue."); } } };
+  ws.onerror = () => {};
+  const sp = ctx.createScriptProcessor(2048, 1, 1), mute = ctx.createGain(); mute.gain.value = 0; S.sp = sp; S.mute = mute; V.msrc.connect(sp); sp.connect(mute); mute.connect(ctx.destination);
+  const sr = ctx.sampleRate, ratio = sr / 16000;
+  sp.onaudioprocess = e => {
+    if (!S.ready || ws.readyState !== 1) return; const d = e.inputBuffer.getChannelData(0); let q = 0; for (let i = 0; i < d.length; i++) q += d[i] * d[i]; const rms = Math.sqrt(q / d.length);
+    const playing = S.lt > ctx.currentTime + 0.02; const quiet = playing && rms < 0.12; if (!playing && rms > 0.02) S.lastUser = Date.now();
+    const m = Math.floor(d.length / ratio), pcm = new Int16Array(m);
+    if (!quiet) for (let i = 0; i < m; i++) { const a = Math.floor(i * ratio), b = Math.max(a + 1, Math.floor((i + 1) * ratio)); let s = 0; for (let k = a; k < b && k < d.length; k++) s += d[k]; let v = Math.max(-1, Math.min(1, s / (b - a))); pcm[i] = v < 0 ? v * 32768 : v * 32767; }
+    ws.send(JSON.stringify({ realtimeInput: { audio: { data: b64(new Uint8Array(pcm.buffer)), mimeType: "audio/pcm;rate=16000" } } }));
+  };
+  S.tick = setInterval(() => {
+    if (!V.liveOn) return; const playing = S.lt > ctx.currentTime + 0.02; if (playing) liveSetState("speaking"); else if (V.state === "speaking") liveSetState("listening");
+    if (!playing && Date.now() - S.lastUser > 120000) { toast("Still here. Tap the mic to talk again."); endLive(); }
+  }, 250);
+  setConvo(true); setState("listening"); setTx(""); startPulse(); return true;
+}
+function liveMsg(S, m) {
+  const ctx = V.out; if (m.goAway) { toast("Live session is ending soon."); }
+  const sc = m.serverContent; if (!sc) return;
+  if (sc.interrupted) { liveFlush(S); }
+  if (sc.inputTranscription && sc.inputTranscription.text) { if (S.outTx) { S.outTx = ""; S.inTx = ""; } S.inTx += sc.inputTranscription.text; S.lastUser = Date.now(); setTx(S.inTx.trim()); if (V.state !== "speaking") liveSetState("listening"); }
+  if (sc.outputTranscription && sc.outputTranscription.text) { S.outTx += sc.outputTranscription.text; setTx(S.outTx.trim()); }
+  if (sc.modelTurn) for (const p of sc.modelTurn.parts || []) if (p.inlineData && p.inlineData.data) {
+    const bin = atob(p.inlineData.data), n = bin.length >> 1, f = new Float32Array(n); for (let i = 0; i < n; i++) { let v = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
+    const b = ctx.createBuffer(1, n, 24000); b.copyToChannel(f, 0); const s = ctx.createBufferSource(); s.buffer = b; s.connect(V.oan); const t = Math.max(S.lt, ctx.currentTime + 0.06); s.start(t); S.lt = t + b.duration; S.src.push(s); s.onended = () => { S.src = S.src.filter(x => x !== s); };
+    V.speaking = true; liveSetState("speaking");
+  }
+  if (sc.turnComplete) { S.inTx = S.inTx; }
+}
+function liveFlush(S) { for (const s of S.src) { try { s.onended = null; s.stop(); } catch (e) {} } S.src = []; S.lt = 0; V.speaking = false; liveSetState("listening"); }
+function liveCleanup() { const S = V.ls; if (!S) return; clearInterval(S.tick); try { if (S.sp) { S.sp.onaudioprocess = null; V.msrc && V.msrc.disconnect(S.sp); S.sp.disconnect(); S.mute.disconnect(); } } catch (e) {} for (const s of S.src) { try { s.onended = null; s.stop(); } catch (e) {} } S.src = []; V.liveOn = false; V.ls = null; V.speaking = false; clearInterval(V.ptick); }
+function endLive() { const S = V.ls; if (S) { S.closed = true; try { S.ws.close(); } catch (e) {} } liveCleanup(); setConvo(false); setState("idle"); }
+const _vmicClassic = $("#vmic").onclick;
+$("#vmic").onclick = async () => {
+  if (V.liveOn) { const S = V.ls; if (S && S.lt > V.out.currentTime + 0.02) { liveFlush(S); try { S.ws.send(JSON.stringify({ realtimeInput: { activityStart: {} } })); } catch (e) {} } else endLive(); return; }
+  if (V.convo || V.state === "thinking" && V.ls) { return _vmicClassic(); }
+  if (V.liveBroken || !V.cloud || !window.WebSocket) return _vmicClassic();
+  V.starting = true; const r = await startLive(); V.starting = false;
+  if (r === true || r === "denied") return;
+  V.liveBroken = true; setState("idle"); toast("Live voice isn’t available right now. Using the classic voice."); _vmicClassic();
+};
+const _sendClassic = sendText;
+const sendLive = () => { const t = $("#vin").value.trim(); if (V.liveOn && V.ls && V.ls.ws.readyState === 1) { if (!t) return; $("#vin").value = ""; V.ls.inTx = t; V.ls.outTx = ""; setTx(t); V.ls.ws.send(JSON.stringify({ realtimeInput: { text: t } })); return; } _sendClassic(); };
+$("#vsend").onclick = sendLive; $("#vin").onkeydown = e => { if (e.key === "Enter") sendLive(); };
 if ("speechSynthesis" in window) speechSynthesis.onvoiceschanged = () => {};
 
 /* ============================================================
