@@ -1,4 +1,4 @@
-const V = "mindly-v29"; const CORE = ["./", "./index.html", "./manifest.webmanifest"];
+const V = "mindly-v30"; const CORE = ["./", "./index.html", "./manifest.webmanifest"];
 /* Only the static app shell is cached: no query strings, no API, no other paths. */
 const isShell = u => { if (u.search) return false; const b = new URL(self.registration.scope).pathname; return u.pathname === b || u.pathname === b + "index.html" || u.pathname === b + "manifest.webmanifest"; };
 self.addEventListener("install", e => { self.skipWaiting(); e.waitUntil(caches.open(V).then(c => c.addAll(CORE.map(u => new Request(u, { cache: "reload" })))).catch(() => {})); });
