@@ -118,6 +118,7 @@ nav.bar .lens{position:absolute;z-index:0;top:5px;bottom:5px;border-radius:30px;
 nav.bar .vb .lens{display:none}
 main{padding-bottom:calc(var(--sb,0px) + 96px)!important}nav.bar .lens.press{transform:scale(1.1,.94)}nav.bar .lens{transition:left .5s,width .5s,transform .25s cubic-bezier(.34,1.56,.5,1)}
 @media(max-width:360px){nav.bar{left:8px;right:8px}}
+#voice #vlang,#voice #vset{min-height:40px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px}
 </style>
 </head>
 <body>
@@ -583,7 +584,7 @@ function vPeople() {
     const tl = DB.interactions.filter(i => i.personId === p.id).sort((a, b) => b.date.localeCompare(a.date)); const cs = DB.commitments.filter(c => c.personId === p.id); const ms = DB.memories.filter(m => m.personId === p.id); const ev = DB.events.filter(e => e.personId === p.id && e.date >= today()); const nt = DB.notes.filter(n => n.personId === p.id);
     const kv = (k, v) => v ? '<div class="kv">' + k + ": <b dir=auto>" + esc(v) + "</b></div>" : "";
     return '<button class="btn" id="back">← People</button><h1>' + esc(p.name) + "</h1>" + '<div class="card">' + kv("Relationship", p.relation) + kv("Profession", p.profession) + kv("Communication", p.comm) + kv("Current project", p.project) + kv("Interests", (p.interests || []).join(", ")) + kv("Important dates", (p.dates || []).join(", ")) + kv("Last conversation", tl[0] ? fmtDate(tl[0].date) : "") + kv("Upcoming", ev.map(e => e.title + " " + fmtDate(e.date)).join("; ")) + (!(p.relation || p.profession || p.comm || p.project) ? '<div class="empty">No details yet.</div>' : "") + '<div class="acts"><button class="btn" data-pedit="' + p.id + '">Edit</button><button class="btn d" data-pdel="' + p.id + '">Delete contact</button></div></div>' +
-      sec("Open commitments") + (cs.filter(c => c.status !== "done").map(c => '<div class="card"><div class="t" dir="auto">' + (c.owner === "me" ? "You → " : "← ") + esc(c.title) + '</div><div class="m">' + (c.due ? fmtDate(c.due) : "no date") + "</div></div>").join("") || empty("None.")) +
+      sec("Open commitments") + (cs.filter(c => c.status !== "done").map(c => '<div class="card"><div class="t" dir="auto">' + (c.owner === "me" ? S("You → ", "أنت ← ") : S("← ", "→ ")) + esc(c.title) + '</div><div class="m">' + (c.due ? fmtDate(c.due) : "no date") + "</div></div>").join("") || empty("None.")) +
       sec("Interaction history") + (tl.length ? '<div class="tl">' + tl.map(i => '<div class="it"><div class="m">' + fmtDate(i.date) + '</div><div class="t" dir="auto">' + esc(i.summary) + '</div><div class="m">' + (i.links || []).length + S(" linked record(s)", " سجل مرتبط") + "</div></div>").join("") + "</div>" : empty("No interactions yet.")) +
       sec("Memories & notes") + (ms.map(memCard).join("") + nt.map(n => '<div class="card"><div class="m">' + S('Note · ', 'ملاحظة · ') + kindLabel(n.kind) + '</div><div class="t" style="white-space:pre-wrap" dir="auto">' + esc(n.title + "\n" + n.text) + "</div></div>").join("") || empty("None.")); }
   const sg = suggestions().filter(s => s.kind === "follow");
@@ -1264,4 +1265,4 @@ function extrasHTML() {
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
 </script>
 </body>
-    </html>
+  </html>
