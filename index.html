@@ -1220,6 +1220,45 @@ let _lensPrev = null;
 function placeLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); const on = nav.querySelector("button.on:not(.vb)"); if (!on) { if (l) l.style.opacity = 0; return; } if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); } const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; }; const cur = { left: on.offsetLeft + 2, width: on.offsetWidth - 4 }; if (_lensPrev && anim) { l.style.transition = "none"; set(_lensPrev); void l.offsetWidth; l.style.transition = ""; requestAnimationFrame(() => set(cur)); } else set(cur); _lensPrev = cur; }
 { const _rn = renderNav; renderNav = function () { _rn(); placeLens(true); }; }
 addEventListener("resize", () => placeLens(false)); setTimeout(() => placeLens(false), 400);
+/* ---- v17: quick capture, prep, nudges, merge ---- */
+const _i = s => esc(s);
+function quickCapture() {
+  sheet('<div class="m"><b>' + S("Quick capture", "تسجيل سريع") + '</b></div><textarea id="qct" dir="auto" rows="4" placeholder="' + S("Type or dictate: who, what, when…", "اكتب أو املي: مين، شو، ومتى…") + '" style="width:100%;font-size:16px"></textarea><div class="acts"><button class="btn p" id="qcs">' + S("Save", "حفظ") + '</button><button class="btn" id="qcm">🎤 ' + S("Voice note", "ملاحظة صوتية") + '</button></div><div class="m" id="qcst"></div>');
+  const st = t => { $("#qcst").textContent = T(t); }; setTimeout(() => { const t = $("#qct"); t && t.focus(); }, 250);
+  $("#qcs").onclick = async () => { const t = $("#qct").value.trim(); if (!t) return; st(S("Saving…", "عم احفظ…")); try { const r = await respondAI(t); closeSheet(); toast(r.text.slice(0, 120)); render(); } catch (e) { st(S("Could not save. Try again.", "ما قدرت احفظ. جرب مرة ثانية.")); } };
+  let rec = null;
+  $("#qcm").onclick = async () => {
+    if (rec) { rec.stop(); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; const lang = DB.settings.lang === "ar" ? "ar-SA" : "en-US";
+    const done = txt => { if (txt) { const t = $("#qct"); t.value = (t.value + " " + txt).trim(); st(S("Check the text, then Save.", "راجع النص ثم احفظ.")); } else st(S("Heard nothing. Try again.", "ما سمعت شي. جرب مرة ثانية.")); $("#qcm").textContent = "🎤 " + S("Voice note", "ملاحظة صوتية"); rec = null; };
+    try {
+      if (navigator.mediaDevices && window.MediaRecorder) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); const mr = new MediaRecorder(stream), ch = []; mr.ondataavailable = e => ch.push(e.data);
+        mr.onstop = async () => { stream.getTracks().forEach(t => t.stop()); st(S("Transcribing…", "عم احول لنص…")); try { const buf = await new Blob(ch).arrayBuffer(); const ac = new (window.AudioContext || window.webkitAudioContext)(); const ab = await new Promise((ok, no) => ac.decodeAudioData(buf, ok, no)); const txt = await sttCloud(toWav16k([ab.getChannelData(0)], ab.sampleRate)); ac.close(); done(txt); } catch (e) { done(""); st(S("Could not transcribe. You can type instead.", "ما قدرت احول لنص. فيك تكتب.")); } };
+        mr.start(); rec = { stop: () => mr.stop() }; $("#qcm").textContent = "⏹ " + S("Stop", "إيقاف"); st(S("Recording… tap again to stop.", "عم سجّل… اضغط مرة ثانية للإيقاف.")); return;
+      }
+      if (SR) { const r = new SR(); r.lang = lang; r.onresult = e => done(e.results[0][0].transcript); r.onerror = () => done(""); r.start(); rec = { stop: () => r.stop() }; $("#qcm").textContent = "⏹ " + S("Stop", "إيقاف"); }
+      else st(S("Voice capture is not supported here.", "التسجيل الصوتي مش مدعوم هون."));
+    } catch (e) { st(S("Microphone is blocked or unavailable.", "المايك محظور أو مش متاح.")); }
+  };
+}
+(function () { const g = $("#langBtn"); if (g && !$("#qcBtn")) { const b = document.createElement("button"); b.className = "btn"; b.id = "qcBtn"; b.setAttribute("aria-label", "Quick capture"); b.style.cssText = "min-width:44px;font-weight:700"; b.textContent = "＋"; b.onclick = quickCapture; g.parentNode.insertBefore(b, g); } })();
+const _DAYMS = 864e5; const nk = s => norm(String(s || "").toLowerCase()).replace(/\s+/g, " ").trim();
+function lastTouch(p) { let t = p.created || 0; const inp = id => { const i = id && byId(DB.inputs, id); return i ? i.ts : 0; }; (p.srcs || []).forEach(id => t = Math.max(t, inp(id))); ["commitments", "tasks", "memories", "events"].forEach(k => (DB[k] || []).forEach(r => { if (r.personId === p.id) t = Math.max(t, inp(r.inputId), r.doneAt || 0); })); return t; }
+function lev(a, b) { const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9; let d = Array.from({ length: n + 1 }, (_, j) => j); for (let i = 1; i <= m; i++) { let pr = d[0]; d[0] = i; for (let j = 1; j <= n; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, pr + (a[i - 1] === b[j - 1] ? 0 : 1)); pr = t; } } return d[n]; }
+function mergePairs() { const out = [], P = DB.people || [], no = DB.noMerge || []; for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) { const a = P[i], b = P[j], k = a.id + "|" + b.id; if (no.includes(k)) continue; const x = nk(a.name), y = nk(b.name); if (!x || !y) continue; const fx = x.split(" ")[0], fy = y.split(" ")[0]; const same = x === y || (fx.length >= 4 && fy.length >= 4 && lev(fx, fy) <= 1 && (x.split(" ").length === 1 || y.split(" ").length === 1 || lev(x, y) <= 2)) || (x.split(" ").length === 1 && y.split(" ")[0] === x) || (y.split(" ").length === 1 && x.split(" ")[0] === y); if (same) out.push([a, b, k]); } return out.slice(0, 3); }
+function doMerge(a, b) { ["commitments", "tasks", "memories", "events"].forEach(k => (DB[k] || []).forEach(r => { if (r.personId === b.id) { r.personId = a.id; if (r.personName) r.personName = a.name; } })); ["relation", "profession", "comm", "project"].forEach(f => { if (!a[f] && b[f]) a[f] = b[f]; }); a.interests = [...new Set([...(a.interests || []), ...(b.interests || [])])]; a.dates = [...new Set([...(a.dates || []), ...(b.dates || [])])]; a.srcs = [...(a.srcs || []), ...(b.srcs || [])]; if (b.name.length > a.name.length) a.name = b.name; DB.people = DB.people.filter(x => x.id !== b.id); save(); }
+function nudgeList() { const now = Date.now(), dm = DB.nudged || {}; return (DB.people || []).map(p => ({ p, d: Math.floor((now - lastTouch(p)) / _DAYMS) })).filter(x => x.d >= 21 && !(dm[x.p.id] && now - dm[x.p.id] < 14 * _DAYMS)).sort((a, b) => b.d - a.d).slice(0, 2); }
+function prepList() { const t = today(), tm = iso(Date.now() + _DAYMS); return (DB.events || []).filter(e => e.personId && (e.date === t || e.date === tm)).slice(0, 2); }
+function extrasHTML() {
+  let h = ""; const card = (cls, inner, acts) => '<div class="card" ' + cls + '><div class="t" dir="auto">' + inner + '</div><div class="acts">' + acts + '</div></div>';
+  prepList().forEach(e => { const P = byId(DB.people, e.personId); if (!P) return; const open = DB.commitments.filter(c => c.personId === P.id && c.status !== "done").slice(0, 3).map(c => "• " + esc(c.title)).join("<br>"); const mem = DB.memories.filter(m => m.personId === P.id).slice(-2).map(m => "• " + esc(m.text)).join("<br>"); h += '<div class="card"><div class="m">' + S("Meeting prep · ", "تحضير اجتماع · ") + (e.date === today() ? S("today", "اليوم") : S("tomorrow", "بكرة")) + (e.time ? " " + esc(e.time) : "") + '</div><div class="t" dir="auto" style="margin-top:3px"><b>' + _i(e.title) + '</b></div><div class="m" dir="auto" style="margin-top:6px">' + _i(personSummary(P) || "") + (open ? '<br><b>' + S("Open with them:", "المعلّق معه:") + '</b><br>' + open : "") + (mem ? '<br><b>' + S("Remember:", "تذكّر:") + '</b><br>' + mem : "") + '</div></div>'; });
+  mergePairs().forEach(([a, b, k]) => { h += card('', S("Are “", "هل “") + _i(a.name) + S("” and “", "” و“") + _i(b.name) + S("” the same person?", "” نفس الشخص؟"), '<button class="btn p" data-mg="' + k + '">' + S("Merge", "دمج") + '</button><button class="btn" data-nomg="' + k + '">' + S("Not the same", "مش نفسه") + '</button>'); });
+  nudgeList().forEach(x => { h += card('', S("It has been ", "صار ") + x.d + S(" days since you connected with ", " يوم من آخر تواصل مع ") + '<b>' + _i(x.p.name) + '</b>.', '<button class="btn p" data-nv="' + x.p.id + '">' + S("Got it", "تمام") + '</button><button class="btn" data-nz="' + x.p.id + '">' + S("Not now", "مش هلأ") + '</button>'); });
+  return h;
+}
+{ const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
+document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
 </script>
 </body>
-  </html>
+        </html>
