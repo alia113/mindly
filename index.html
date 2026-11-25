@@ -136,6 +136,7 @@ nav.bar .lens .lc svg{width:22px;height:22px;stroke:currentColor;fill:none;strok
 nav.bar .lens{background:linear-gradient(180deg,rgba(255,255,255,.2),rgba(255,255,255,.05))!important;border:1px solid rgba(255,255,255,.6)!important;-webkit-backdrop-filter:saturate(1.6) brightness(1.2);backdrop-filter:saturate(1.6) brightness(1.2)}
 nav.bar>button{transition:opacity .06s linear}
 nav.bar .lens,nav.bar .lens *{font-style:normal!important}
+nav.bar{transition:transform .25s ease,opacity .2s}nav.bar.kb{transform:translateY(140%);opacity:0;pointer-events:none}
 </style>
 </head>
 <body>
@@ -1234,8 +1235,26 @@ $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
 if (pushSub()) pushSyncNow(true);
 /* ---- v17 nav: bottom anchoring + spring lens ---- */
 document.body.appendChild($("#nav"));
-function fixInset() { try { let pr = document.getElementById("insetProbe"); if (!pr) { pr = document.createElement("div"); pr.id = "insetProbe"; pr.style.cssText = "position:fixed;left:0;top:0;width:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)"; document.body.appendChild(pr); } const inset = pr.offsetHeight || 0; const portrait = innerHeight >= innerWidth; const full = Math.max(screen.height || 0, window.outerHeight || 0), gap = portrait && screen.width <= 500 ? Math.max(0, full - innerHeight) : 0; window._diag = "inner " + innerWidth + "x" + innerHeight + " · screen " + screen.width + "x" + screen.height + " · outer " + window.outerHeight + " · inset " + inset + " · gap " + gap + " · standalone " + (navigator.standalone ? 1 : 0); const st = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches); document.documentElement.style.setProperty("--sb", (st ? 4 : Math.max(0, inset - gap)) + "px"); } catch (e) {} }
-fixInset(); addEventListener("resize", fixInset); addEventListener("orientationchange", () => setTimeout(fixInset, 300)); addEventListener("pageshow", fixInset);
+function fixInset() {
+  try {
+    const mk = (id, css) => { let e = document.getElementById(id); if (!e) { e = document.createElement("div"); e.id = id; e.style.cssText = "position:fixed;left:0;width:1px;visibility:hidden;pointer-events:none;" + css; document.body.appendChild(e); } return e; };
+    const pi = mk("insetProbe", "top:0;height:0;padding-bottom:env(safe-area-inset-bottom,0px)"), pb = mk("pageProbe", "bottom:0;height:0");
+    const inset = pi.offsetHeight || 0, vv = window.visualViewport, ih = window.innerHeight, iw = window.innerWidth;
+    const pageBottom = pb.getBoundingClientRect().bottom || ih;
+    const portrait = ih >= iw, st = !!(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches));
+    const full = portrait ? Math.max(screen.height || 0, window.outerHeight || 0, ih) : ih;
+    const gap = Math.min(220, Math.max(0, full - pageBottom));
+    const remaining = Math.max(0, inset - gap);
+    const nb = remaining > 0 && !st ? Math.max(10, remaining - 4) : 12;
+    const root = document.documentElement; root.style.setProperty("--sb", (nb - 8) + "px");
+    const kb = !!(vv && vv.height < Math.min(ih, pageBottom) - 150);
+    const nav = document.getElementById("nav"); if (nav) nav.classList.toggle("kb", kb);
+    window._diag = "inner " + iw + "x" + ih + " · vv " + (vv ? Math.round(vv.height) : "-") + " · pageBottom " + Math.round(pageBottom) + " · screen " + screen.width + "x" + screen.height + " · outer " + window.outerHeight + " · inset " + inset + " · gap " + Math.round(gap) + " · bottom " + nb + " · standalone " + (st ? 1 : 0) + " · kb " + (kb ? 1 : 0);
+  } catch (e) {}
+}
+fixInset(); ["resize", "orientationchange", "pageshow", "focusin", "focusout"].forEach(ev => addEventListener(ev, () => { fixInset(); setTimeout(fixInset, 350); }));
+if (window.visualViewport) { visualViewport.addEventListener("resize", fixInset); visualViewport.addEventListener("scroll", fixInset); }
+[300, 1200, 3000].forEach(t => setTimeout(fixInset, t));
 let _lensPrev = null;
 function moveLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); const lc = document.createElement("div"); lc.className = "lc"; lc.setAttribute("aria-hidden", "true"); lc.style.width = nav.clientWidth + "px"; lc.style.height = nav.clientHeight + "px"; lc.innerHTML = [...nav.querySelectorAll("button")].map(b => b.outerHTML.replace(/ id="[^"]*"/g, "").replace(/ data-v="[^"]*"/g, "").replace(/ class="on"/, ' class=""')).join(""); l.appendChild(lc); } const on = nav.querySelector("button.on:not(.vb)"); if (!on) { l.style.opacity = 0; return; } const cur = { left: on.offsetLeft - 2, width: on.offsetWidth + 4 }; const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; const lc = l.querySelector(".lc"); if (lc) { lc.style.width = nav.clientWidth + "px"; lc.style.height = nav.clientHeight + "px"; lc.style.transition = l.style.transition || "none"; lc.style.left = -(r.left + 1) + "px"; } trackLens(900); }; if (_lensPrev && anim && (Math.abs(_lensPrev.left - cur.left) > 2)) { const lo = Math.min(_lensPrev.left, cur.left), hi = Math.max(_lensPrev.left + _lensPrev.width, cur.left + cur.width); l.style.transition = "left .16s ease-out,width .16s ease-out"; set({ left: lo, width: hi - lo }); clearTimeout(l._t); l._t = setTimeout(() => { l.style.transition = "left .5s cubic-bezier(.34,1.56,.5,1),width .5s cubic-bezier(.34,1.56,.5,1)"; set(cur); }, 150); } else { l.style.transition = "none"; set(cur); } _lensPrev = cur; }
 { const _rn = renderNav; renderNav = function () { const nav = $("#nav"), k = DB.settings.lang + "|" + (nav.querySelector("[data-v]") ? 1 : 0); if (nav.dataset.k !== k) { const keep = nav.querySelector(".lens"); _rn(); nav.dataset.k = DB.settings.lang + "|1"; _lensPrev = _lensPrev; } else nav.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("on", x.dataset.v === view)); moveLens(true); }; }
