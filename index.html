@@ -808,10 +808,14 @@ function startPulse() { clearInterval(V.ptick); V.ptick = setInterval(() => { tr
 async function ttsFetch(text) {
   const c = new AbortController(), tm = setTimeout(() => c.abort(), 20000);
   try {
-    const r = await fetch(AI_URL + "/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, voice: DB.settings.voice || "Kore", model: V.ttsModel === false ? undefined : "gemini-3.8-flash-lite-tts" }), signal: c.signal }); if (!r.ok) { if (V.ttsModel !== false) { V.ttsModel = false; clearTimeout(tm); return ttsFetch(text); } return null; } const j = await r.json(); if (!j.audio) return null;
+    const r = await fetch(AI_URL + "/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: (/[\u0600-\u06FF]/.test(text) ? "Speak in a warm, relaxed, friendly Levantine Arabic conversational tone, like a close friend chatting, natural pace, no diacritics reading. Say: " : "Speak in a warm, relaxed, friendly, natural conversational tone, like a close friend chatting. Say: ") + text, voice: "Sulafat", model: V.ttsModel === false ? undefined : "gemini-3.8-flash-tts" }), signal: c.signal }); if (!r.ok) { if (V.ttsModel !== false) { V.ttsModel = false; clearTimeout(tm); return ttsFetch(text); } return null; } const j = await r.json(); if (!j.audio) return null;
     const bin = atob(j.audio), off = bin.slice(0, 4) === "RIFF" ? 44 : 0, n = (bin.length - off) >> 1, f = new Float32Array(n);
     for (let i = 0; i < n; i++) { let v = bin.charCodeAt(off + 2 * i) | (bin.charCodeAt(off + 2 * i + 1) << 8); if (v >= 32768) v -= 65536; f[i] = v / 32768; }
-    const m = /rate=(\d+)/i.exec(j.mime || ""), buf = V.out.createBuffer(1, n, m ? +m[1] : 24000); buf.copyToChannel(f, 0); return buf;
+    const m = /rate=(\d+)/i.exec(j.mime || ""), sr = m ? +m[1] : 24000; let end = n; const W = Math.round(sr * 0.01), rms = (a, z) => { let q = 0; for (let k = a; k < z; k++) q += f[k] * f[k]; return Math.sqrt(q / Math.max(1, z - a)); };
+    for (let p = Math.max(4 * W, n - Math.round(sr * 0.6)); p < n - 3 * W; p += W) { const r0 = rms(p, p + W); if (r0 > 0.3 && rms(p - W, p) < 0.01 && rms(p - 3 * W, p - 2 * W) < 0.01 && Math.abs(rms(p + W, p + 2 * W) - r0) < 0.1 && Math.abs(rms(p + 2 * W, p + 3 * W) - r0) < 0.1) { end = p - 2 * W; break; } }
+    for (let p = end - W; p > end - sr * 0.12 && p > 0; p -= W) { if (rms(p, p + W) < 0.004) { end = p + W; break; } }
+    const fd = Math.min(end, Math.round(sr * 0.03)); for (let k = 0; k < fd; k++) f[end - 1 - k] *= k / fd; const fi = Math.min(end, Math.round(sr * 0.005)); for (let k = 0; k < fi; k++) f[k] *= k / fi;
+    const buf = V.out.createBuffer(1, Math.max(1, end), sr); buf.copyToChannel(f.subarray(0, Math.max(1, end)), 0); return buf;
   } catch (e) { return null; } finally { clearTimeout(tm); }
 }
 function splitSpeech(text) {
@@ -964,4 +968,4 @@ if (location.hash === "#voice") openVoiceScreen();
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) { /* offline cache optional */ }
 </script>
 </body>
-    </html>
+        </html>
