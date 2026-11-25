@@ -64,7 +64,7 @@ input,textarea,select{width:100%;background:var(--card);border:1px solid var(--l
 .rb.off{color:#ff8f8f}
 .mic{width:78px;height:78px;border-radius:50%;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 6px rgba(255,255,255,.08)}
 .mic svg{width:30px;height:30px}
-.mic.rec{background:#fff;box-shadow:0 0 0 6px rgba(255,255,255,.16),0 0 40px rgba(130,150,255,.4)}
+.mic.convo{box-shadow:0 0 0 3px rgba(130,150,255,.45)}.mic.rec{background:#fff;box-shadow:0 0 0 6px rgba(255,255,255,.16),0 0 40px rgba(130,150,255,.4)}
 #vtext{display:none;margin-bottom:14px}
 #vtext.on{display:flex;gap:8px}
 #vtext input{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.12)}
@@ -617,7 +617,8 @@ const AR = {
   "Edit memory": "تعديل الذاكرة", "Confirmed fact": "معلومة مؤكدة", "My assumption": "افتراض مني", "Type": "النوع", "Save correction": "حفظ التصحيح", "☆ Mark important": "☆ علّم كمهم", "★ Important": "★ مهم",
   "Ready when you are.": "جاهز وقت ما تحب.", "Listening…": "عم سمعك…", "Thinking…": "عم فكّر…", "Speaking…": "عم احكي…", "End conversation": "إنهاء المحادثة", "Type to Mindly…": "اكتب لمايندلي…", "Send": "إرسال", "voice ready": "الصوت جاهز", "text only": "كتابة فقط", "offline": "غير متصل",
   "Marked done": "تم تعليمها منجزة", "Speech recognition isn’t supported in this browser. Type instead.": "المتصفح ما بدعم التعرف على الصوت. اكتب بدل.", "Microphone blocked. Allow it in the browser, or type instead.": "المايك محجوب. اسمح فيه من المتصفح أو اكتب.", "Microphone permission denied.": "تم رفض إذن المايك.", "Speech output isn’t supported here.": "الصوت المنطوق غير مدعوم هون.", "WebGL isn’t available on this device.": "WebGL مش متوفر على هالجهاز.",
-  "Settings": "الإعدادات", "Text": "نص", "Microphone": "المايك", "Mute voice": "كتم الصوت", "Voice": "صوت"
+  "Settings": "الإعدادات", "Text": "نص", "Microphone": "المايك", "Mute voice": "كتم الصوت", "Voice": "صوت",
+  "Still here. Tap the mic to talk again.": "لسا هون. اضغط المايك لنكمل حكي.", "Speech recognition needs an internet connection.": "التعرف على الصوت بدو إنترنت.", "Couldn’t use the microphone. Tap the mic to try again.": "ما قدرت استخدم المايك. اضغط المايك وجرّب.", "No Arabic voice found on this phone. Install one in your phone’s text-to-speech settings.": "ما لقيت صوت عربي بجوالك. نزّل واحد من إعدادات النطق (Text-to-speech).", "Couldn’t play the voice. The reply is on screen.": "ما اشتغل الصوت. الرد مكتوب على الشاشة."
 };
 const T = s => (DB.settings.lang === "ar" && AR[s]) || s;
 function tr(root) {
@@ -649,34 +650,90 @@ function setState(s) { V.state = s; const L = { idle: "Ready when you are.", lis
 function setTx(t) { const e = $("#vtx"); e.textContent = t; e.dir = "auto"; }
 function syncMute() { $("#vmute").classList.toggle("off", DB.settings.mute); if (DB.settings.mute && "speechSynthesis" in window) speechSynthesis.cancel(); }
 function openVoiceScreen() { $("#voice").classList.add("on"); V.active = true; V.lang = DB.settings.lang === "ar" ? "ar-EG" : "en-US"; $("#vlang").textContent = V.lang === "ar-EG" ? "عربي" : "EN"; tr($("#voice")); $("#conn").className = SR ? "ok" : ""; $("#conn span").textContent = T(SR ? "voice ready" : "text only"); syncMute(); setState("idle"); setTx(""); GL.start(); }
-function closeVoiceScreen() { V.active = false; stopListen(true); if ("speechSynthesis" in window) speechSynthesis.cancel(); $("#voice").classList.remove("on"); GL.stop(); setState("idle"); render(); }
+function closeVoiceScreen() { V.active = false; if (typeof setConvo === "function") setConvo(false); stopListen(true); if ("speechSynthesis" in window) speechSynthesis.cancel(); $("#voice").classList.remove("on"); GL.stop(); setState("idle"); render(); }
+const MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+V.convo = false; V.turn = 0; V.empty = 0; V.wl = null; V.wd = 0;
+function setConvo(on) {
+  V.convo = on; V.turn++; V.empty = 0;
+  if (on) { try { if (navigator.wakeLock) navigator.wakeLock.request("screen").then(l => { V.wl = l; }).catch(() => {}); } catch (e) {} }
+  else { try { if (V.wl) V.wl.release(); } catch (e) {} V.wl = null; }
+  $("#vmic").classList.toggle("convo", on);
+}
+function unlockSpeech() { if (!("speechSynthesis" in window) || V.unlocked) return; try { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); V.unlocked = true; } catch (e) {} }
+function pickVoice(lang) {
+  const vs = speechSynthesis.getVoices(); const p = lang.slice(0, 2);
+  return vs.find(x => x.lang === lang) || vs.find(x => x.lang.replace("_", "-") === lang) || vs.find(x => x.lang.toLowerCase().startsWith(p)) || null;
+}
+function backToListening(delay) {
+  if (!V.convo || !V.active) { if (V.active) setState("idle"); return; }
+  const t = V.turn; setState("idle"); setTimeout(() => { if (V.convo && V.active && V.turn === t && V.state === "idle") startListen(); }, delay || 400);
+}
+function endConvo() { setConvo(false); stopListen(true); if ("speechSynthesis" in window) speechSynthesis.cancel(); V.speaking = false; setState("idle"); }
 async function startListen() {
   if ("speechSynthesis" in window) speechSynthesis.cancel(); V.speaking = false;
-  if (!SR) { $("#vtext").classList.add("on"); $("#vin").focus(); toast("Speech recognition isn’t supported in this browser. Type instead."); return; }
-  try { if (!V.stream) { V.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); V.ac = new (window.AudioContext || window.webkitAudioContext)(); const src = V.ac.createMediaStreamSource(V.stream); V.an = V.ac.createAnalyser(); V.an.fftSize = 512; V.an.smoothingTimeConstant = .6; src.connect(V.an); V.buf = new Uint8Array(V.an.fftSize); } if (V.ac.state === "suspended") V.ac.resume(); } catch (e) { toast("Microphone blocked. Allow it in the browser, or type instead."); $("#vtext").classList.add("on"); return; }
-  const r = new SR(); r.lang = V.lang; r.interimResults = true; r.continuous = false; V.rec = r; let finalT = "";
-  r.onresult = ev => { let it = ""; for (let i = ev.resultIndex; i < ev.results.length; i++) { const x = ev.results[i]; if (x.isFinal) finalT += x[0].transcript; else it += x[0].transcript; } setTx(finalT + it); };
-  r.onerror = ev => { if (ev.error === "not-allowed") toast("Microphone permission denied."); else if (ev.error === "no-speech") setTx(""); };
-  r.onend = () => { V.rec = null; if (V.state === "listening") { const t = (finalT || $("#vtx").textContent).trim(); if (t) handle(t); else setState("idle"); } };
-  setState("listening"); setTx(""); try { r.start(); } catch (e) { setState("idle"); }
+  if (!SR) { setConvo(false); $("#vtext").classList.add("on"); $("#vin").focus(); toast("Speech recognition isn’t supported in this browser. Type instead."); return; }
+  try {
+    if (!V.stream && !V.permOk) {
+      const st = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (MOBILE) { st.getTracks().forEach(t => t.stop()); V.permOk = true; }
+      else { V.stream = st; V.ac = new (window.AudioContext || window.webkitAudioContext)(); const src = V.ac.createMediaStreamSource(st); V.an = V.ac.createAnalyser(); V.an.fftSize = 512; V.an.smoothingTimeConstant = .6; src.connect(V.an); V.buf = new Uint8Array(V.an.fftSize); }
+    }
+    if (V.ac && V.ac.state === "suspended") V.ac.resume();
+  } catch (e) { setConvo(false); setState("idle"); toast("Microphone blocked. Allow it in the browser, or type instead."); $("#vtext").classList.add("on"); return; }
+  const turn = V.turn; const r = new SR(); r.lang = V.lang; r.interimResults = true; r.continuous = false; V.rec = r; let finalT = "", fatal = false;
+  r.onresult = ev => { let it = ""; for (let i = ev.resultIndex; i < ev.results.length; i++) { const x = ev.results[i]; if (x.isFinal) finalT += x[0].transcript; else it += x[0].transcript; } V.pulse = 1; setTx(finalT + it); };
+  r.onerror = ev => { if (ev.error === "not-allowed" || ev.error === "service-not-allowed") { fatal = true; setConvo(false); toast("Microphone permission denied."); } else if (ev.error === "audio-capture" || ev.error === "network" || ev.error === "language-not-supported") { fatal = true; setConvo(false); toast(ev.error === "network" ? "Speech recognition needs an internet connection." : "Couldn’t use the microphone. Tap the mic to try again."); } };
+  r.onend = () => {
+    if (V.rec === r) V.rec = null; if (V.turn !== turn && !V.convo) { if (V.state === "listening") setState("idle"); return; }
+    if (V.state !== "listening") return;
+    const t = (finalT || $("#vtx").textContent).trim();
+    if (t) { V.empty = 0; handle(t); return; }
+    setState("idle");
+    if (fatal || !V.convo) return;
+    if (++V.empty >= 4) { setConvo(false); toast("Still here. Tap the mic to talk again."); return; }
+    backToListening(150);
+  };
+  setState("listening"); setTx(""); try { r.start(); } catch (e) { setState("idle"); if (V.convo) backToListening(600); }
 }
 function stopListen(silent) { if (V.rec) { try { silent ? V.rec.abort() : V.rec.stop(); } catch (e) {} } if (silent && V.state === "listening") setState("idle"); }
 function handle(text) {
-  setState("thinking"); setTx(text);
-  setTimeout(async () => { let r; try { r = await respondAI(text); } catch (e) { r = { text: "Sorry, something went wrong on my side. Nothing was changed." }; } showReply(r, text); }, 450);
+  const turn = ++V.turn; setState("thinking"); setTx(text);
+  setTimeout(async () => { let r; try { r = await respondAI(text); } catch (e) { r = { text: "Sorry, something went wrong on my side. Nothing was changed." }; } if (V.turn !== turn || !V.active) return; showReply(r, text); }, 300);
 }
-function showReply(r, q) { const ar = isAr(q) || isAr(r.text); setTx(r.text); if (DB.settings.mute || !("speechSynthesis" in window)) { setState("idle"); return; } speak(r.text, ar ? "ar-EG" : "en-US"); }
-function speak(text, lang, fromHome) {
-  if (!("speechSynthesis" in window)) { toast("Speech output isn’t supported here."); return; }
-  speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text.replace(/[•]/g, ""));
-  u.lang = lang; const vs = speechSynthesis.getVoices(); const v = vs.find(x => x.lang === lang) || vs.find(x => x.lang.startsWith(lang.slice(0, 2))); if (v) u.voice = v; u.rate = 1;
-  u.onstart = () => { V.speaking = true; if (V.active) setState("speaking"); };
-  u.onboundary = () => { V.pulse = 1; };
-  u.onend = u.onerror = () => { V.speaking = false; if (V.active) setState("idle"); };
-  speechSynthesis.speak(u);
+function showReply(r, q) {
+  const ar = (r.text.match(/[\u0600-\u06FF]/g) || []).length > (r.text.match(/[A-Za-z]/g) || []).length; setTx(r.text);
+  if (DB.settings.mute || !("speechSynthesis" in window)) { backToListening(1500); return; }
+  speak(r.text, ar ? "ar-EG" : "en-US", false, () => backToListening(350));
 }
-$("#vmic").onclick = () => { if (V.state === "listening") { stopListen(); } else startListen(); };
-$("#vend").onclick = closeVoiceScreen; $("#vmute").onclick = () => { DB.settings.mute = !DB.settings.mute; save(); syncMute(); };
+function speak(text, lang, fromHome, done) {
+  if (!("speechSynthesis" in window)) { toast("Speech output isn’t supported here."); if (done) done(); return; }
+  speechSynthesis.cancel(); const myTurn = ++V.wd;
+  const clean = text.replace(/[•*_#]/g, " ").replace(/\s+/g, " ").trim();
+  const parts = (clean.match(/[^.!?؟۔\n]+[.!?؟۔]*/g) || [clean]).map(s => s.trim()).filter(Boolean); const chunks = []; let cur = "";
+  for (const p of parts) { if ((cur + " " + p).length > 160 && cur) { chunks.push(cur); cur = p; } else cur = cur ? cur + " " + p : p; } if (cur) chunks.push(cur);
+  const v = pickVoice(lang); if (!v && lang.startsWith("ar") && !V.warned) { V.warned = true; toast("No Arabic voice found on this phone. Install one in your phone’s text-to-speech settings."); }
+  let i = 0, started = false, finished = false;
+  const finish = () => { if (finished || V.wd !== myTurn) return; finished = true; clearInterval(keep); V.speaking = false; if (done) done(); else if (V.active && !fromHome) setState("idle"); };
+  const next = () => {
+    if (V.wd !== myTurn) return; if (i >= chunks.length) { finish(); return; }
+    const u = new SpeechSynthesisUtterance(chunks[i++]); u.lang = v ? v.lang : lang; if (v) u.voice = v; u.rate = 1; u.volume = 1;
+    u.onstart = () => { started = true; V.speaking = true; if (V.active && !fromHome) setState("speaking"); };
+    u.onboundary = () => { V.pulse = 1; };
+    u.onend = () => next();
+    u.onerror = ev => { if (ev && (ev.error === "canceled" || ev.error === "interrupted")) return; next(); };
+    speechSynthesis.speak(u);
+  };
+  const keep = setInterval(() => { if (V.wd !== myTurn) { clearInterval(keep); return; } try { if (speechSynthesis.paused) speechSynthesis.resume(); } catch (e) {} }, 4000);
+  next();
+  setTimeout(() => { if (!started && !finished && V.wd === myTurn) { try { speechSynthesis.cancel(); } catch (e) {} if (lang.startsWith("ar")) toast("Couldn’t play the voice. The reply is on screen."); finish(); } }, 4500);
+}
+$("#vmic").onclick = () => {
+  unlockSpeech();
+  if (V.state === "speaking") { V.wd++; speechSynthesis.cancel(); V.speaking = false; if (!V.convo) setConvo(true); startListen(); return; }
+  if (V.convo) { endConvo(); return; }
+  setConvo(true); startListen();
+};
+$("#vend").onclick = () => { endConvo(); closeVoiceScreen(); }; $("#vmute").onclick = () => { DB.settings.mute = !DB.settings.mute; save(); syncMute(); };
 $("#vkb").onclick = () => { $("#vtext").classList.toggle("on"); if ($("#vtext").classList.contains("on")) $("#vin").focus(); };
 const sendText = () => { const t = $("#vin").value.trim(); if (!t) return; $("#vin").value = ""; handle(t); }; $("#vsend").onclick = sendText; $("#vin").onkeydown = e => { if (e.key === "Enter") sendText(); };
 $("#vlang").onclick = () => setLang(DB.settings.lang === "ar" ? "en" : "ar");
