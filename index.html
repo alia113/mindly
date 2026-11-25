@@ -107,8 +107,8 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom,0px))}
 @media(max-width:360px){nav.bar{left:8px;right:8px;padding:5px}nav.bar button{font-size:9.5px}}
 /* v16 nav: iOS-26 style liquid glass + robust bottom anchoring */
 html{height:-webkit-fill-available}body{min-height:100vh;min-height:-webkit-fill-available}
-#app{height:var(--appH,auto)}
-nav.bar{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px + var(--nbx,0px));max-width:536px;margin:0 auto;padding:5px;border-radius:36px;z-index:20;isolation:isolate;
+html,body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
+nav.bar{position:fixed;left:12px;right:12px;bottom:calc(var(--sb,0px) + 8px);max-width:536px;margin:0 auto;padding:5px;border-radius:36px;z-index:10;isolation:isolate;
 background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.05));-webkit-backdrop-filter:blur(10px) saturate(2.1) brightness(1.15);backdrop-filter:blur(10px) saturate(2.1) brightness(1.15);
 border:1px solid rgba(255,255,255,.22);box-shadow:0 8px 30px rgba(0,0,0,.45),inset 0 1.5px 0 rgba(255,255,255,.6),inset 0 -1px 0 rgba(255,255,255,.18),inset 1px 0 0 rgba(255,255,255,.22),inset -1px 0 0 rgba(255,255,255,.22),inset 0 0 22px rgba(255,255,255,.07)}
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){nav.bar{background:rgba(40,40,46,.97)}}
@@ -116,7 +116,7 @@ nav.bar button{position:relative;z-index:1;color:rgba(255,255,255,.72)}
 nav.bar button.on{background:none;box-shadow:none;color:#fff}
 nav.bar .lens{position:absolute;z-index:0;top:5px;bottom:5px;border-radius:30px;pointer-events:none;background:linear-gradient(180deg,rgba(255,255,255,.3),rgba(255,255,255,.12));border:1px solid rgba(255,255,255,.35);box-shadow:inset 0 1.5px 0 rgba(255,255,255,.65),inset 0 -6px 12px rgba(255,255,255,.08),0 2px 10px rgba(0,0,0,.25);transition:left .5s cubic-bezier(.34,1.45,.5,1),width .5s cubic-bezier(.34,1.45,.5,1),opacity .2s}
 nav.bar .vb .lens{display:none}
-main{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 96px)!important}
+main{padding-bottom:calc(var(--sb,0px) + 96px)!important}nav.bar .lens.press{transform:scale(1.1,.94)}nav.bar .lens{transition:left .5s,width .5s,transform .25s cubic-bezier(.34,1.56,.5,1)}
 @media(max-width:360px){nav.bar{left:8px;right:8px}}
 </style>
 </head>
@@ -1213,13 +1213,16 @@ settingsSheet = function () {
 };
 $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet;
 if (pushSub()) pushSyncNow(true);
-/* ---- v16 nav: lens + viewport fix ---- */
-function fixViewport() { try { const st = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches); const sh = Math.max(screen.height, screen.width > screen.height ? 0 : screen.height); const ih = window.innerHeight; let x = 0; if (st && screen.width <= 500 && sh - ih > 1 && sh - ih < 220 && Math.abs(window.innerWidth - screen.width) < 2) x = sh - ih; document.documentElement.style.setProperty("--nbx", (-x) + "px"); document.documentElement.style.setProperty("--appH", x ? sh + "px" : "auto"); } catch (e) {} }
-fixViewport(); addEventListener("resize", fixViewport); addEventListener("orientationchange", () => setTimeout(fixViewport, 300)); addEventListener("pageshow", fixViewport);
+/* ---- v17 nav: bottom anchoring + spring lens ---- */
+document.body.appendChild($("#nav"));
+function fixInset() { try { let pr = document.getElementById("insetProbe"); if (!pr) { pr = document.createElement("div"); pr.id = "insetProbe"; pr.style.cssText = "position:fixed;left:0;top:0;width:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)"; document.body.appendChild(pr); } const inset = pr.offsetHeight || 0; const portrait = innerHeight >= innerWidth; const gap = portrait && screen.width <= 500 ? Math.max(0, screen.height - innerHeight) : 0; document.documentElement.style.setProperty("--sb", Math.max(0, inset - gap) + "px"); } catch (e) {} }
+fixInset(); addEventListener("resize", fixInset); addEventListener("orientationchange", () => setTimeout(fixInset, 300)); addEventListener("pageshow", fixInset);
 let _lensPrev = null;
-function placeLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); const on = nav.querySelector("button.on:not(.vb)"); if (!on) { if (l) l.style.opacity = 0; return; } if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); } const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; }; const cur = { left: on.offsetLeft + 2, width: on.offsetWidth - 4 }; if (_lensPrev && anim) { l.style.transition = "none"; set(_lensPrev); void l.offsetWidth; l.style.transition = ""; requestAnimationFrame(() => set(cur)); } else set(cur); _lensPrev = cur; }
-{ const _rn = renderNav; renderNav = function () { _rn(); placeLens(true); }; }
-addEventListener("resize", () => placeLens(false)); setTimeout(() => placeLens(false), 400);
+function moveLens(anim) { const nav = $("#nav"); if (!nav) return; let l = nav.querySelector(".lens"); if (!l) { l = document.createElement("i"); l.className = "lens"; nav.insertBefore(l, nav.firstChild); } const on = nav.querySelector("button.on:not(.vb)"); if (!on) { l.style.opacity = 0; return; } const cur = { left: on.offsetLeft + 2, width: on.offsetWidth - 4 }; const set = r => { l.style.left = r.left + "px"; l.style.width = r.width + "px"; l.style.opacity = 1; }; if (_lensPrev && anim && (Math.abs(_lensPrev.left - cur.left) > 2)) { const lo = Math.min(_lensPrev.left, cur.left), hi = Math.max(_lensPrev.left + _lensPrev.width, cur.left + cur.width); l.style.transition = "left .16s ease-out,width .16s ease-out"; set({ left: lo, width: hi - lo }); clearTimeout(l._t); l._t = setTimeout(() => { l.style.transition = "left .5s cubic-bezier(.34,1.56,.5,1),width .5s cubic-bezier(.34,1.56,.5,1)"; set(cur); }, 150); } else { l.style.transition = "none"; set(cur); } _lensPrev = cur; }
+{ const _rn = renderNav; renderNav = function () { const nav = $("#nav"), k = DB.settings.lang + "|" + (nav.querySelector("[data-v]") ? 1 : 0); if (nav.dataset.k !== k) { const keep = nav.querySelector(".lens"); _rn(); nav.dataset.k = DB.settings.lang + "|1"; _lensPrev = _lensPrev; } else nav.querySelectorAll("[data-v]").forEach(x => x.classList.toggle("on", x.dataset.v === view)); moveLens(true); }; }
+$("#nav").addEventListener("pointerdown", e => { const b = e.target.closest("button[data-v]"), l = $("#nav .lens"); if (b && l && b.classList.contains("on")) l.classList.add("press"); });
+["pointerup", "pointercancel", "pointerleave"].forEach(ev => $("#nav").addEventListener(ev, () => { const l = $("#nav .lens"); if (l) l.classList.remove("press"); }));
+addEventListener("resize", () => moveLens(false)); renderNav(); setTimeout(() => moveLens(false), 300);
 /* ---- v17: quick capture, prep, nudges, merge ---- */
 const _i = s => esc(s);
 function quickCapture() {
@@ -1261,4 +1264,4 @@ function extrasHTML() {
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
 </script>
 </body>
-        </html>
+  </html>
