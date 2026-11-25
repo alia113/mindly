@@ -119,6 +119,7 @@ nav.bar .vb .lens{display:none}
 main{padding-bottom:calc(var(--sb,0px) + 96px)!important}nav.bar .lens.press{transform:scale(1.1,.94)}nav.bar .lens{transition:left .5s,width .5s,transform .25s cubic-bezier(.34,1.56,.5,1)}
 @media(max-width:360px){nav.bar{left:8px;right:8px}}
 #voice #vlang,#voice #vset{min-height:40px;min-width:44px;display:inline-flex;align-items:center;justify-content:center;padding:0 12px}
+.dlg .sheet:has(#qct){padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));max-height:55dvh}
 </style>
 </head>
 <body>
@@ -1228,7 +1229,7 @@ addEventListener("resize", () => moveLens(false)); renderNav(); setTimeout(() =>
 /* ---- v17: quick capture, prep, nudges, merge ---- */
 const _i = s => esc(s);
 function quickCapture() {
-  sheet('<div class="m"><b>' + S("Quick capture", "تسجيل سريع") + '</b></div><textarea id="qct" dir="auto" rows="4" placeholder="' + S("Type or dictate: who, what, when…", "اكتب أو املي: مين، شو، ومتى…") + '" style="width:100%;font-size:16px"></textarea><div class="acts"><button class="btn p" id="qcs">' + S("Save", "حفظ") + '</button><button class="btn" id="qcm">🎤 ' + S("Voice note", "ملاحظة صوتية") + '</button></div><div class="m" id="qcst"></div>');
+  sheet('<div class="m"><b>' + S("Quick capture", "تسجيل سريع") + '</b></div><textarea id="qct" dir="auto" rows="2" placeholder="' + S("Type or dictate: who, what, when…", "اكتب أو املي: مين، شو، ومتى…") + '" style="width:100%;font-size:16px;min-height:0;height:64px;max-height:120px;resize:none;padding:8px 10px;margin-top:4px"></textarea><div class="acts" style="margin-top:8px"><button class="btn p" id="qcs">' + S("Save", "حفظ") + '</button><button class="btn" id="qcm">🎤 ' + S("Voice note", "ملاحظة صوتية") + '</button></div><div class="m" id="qcst"></div>');
   const st = t => { $("#qcst").textContent = T(t); }; setTimeout(() => { const t = $("#qct"); t && t.focus(); }, 250);
   $("#qcs").onclick = async () => { const t = $("#qct").value.trim(); if (!t) return; st(S("Saving…", "عم احفظ…")); try { const r = await respondAI(t); closeSheet(); toast(r.text.slice(0, 120)); render(); } catch (e) { st(S("Could not save. Try again.", "ما قدرت احفظ. جرب مرة ثانية.")); } };
   let rec = null;
@@ -1266,4 +1267,4 @@ function extrasHTML() {
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
 </script>
 </body>
-                                                                                                               </html>
+  </html>
