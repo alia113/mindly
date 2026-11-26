@@ -1113,7 +1113,7 @@ function fixInset() {
     const full = portrait ? Math.max(screen.height || 0, window.outerHeight || 0, ih) : ih;
     const gap = Math.min(220, Math.max(0, full - pageBottom));
     const remaining = Math.max(0, inset - gap);
-    const nb0 = remaining > 0 && !st ? Math.max(10, remaining - 4) : 12;
+    const nb0 = remaining > 0 ? (st ? Math.max(12, remaining - 12) : Math.max(10, remaining - 4)) : 12;
     const root = document.documentElement, nb = nb0;
     root.style.setProperty("--sb", (nb - 8) + "px");
     const kb = !!(vv && vv.height < Math.min(ih, pageBottom) - 150);
