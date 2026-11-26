@@ -196,6 +196,24 @@ const blank = () => ({
 let DB;
 try { DB = JSON.parse(localStorage.getItem(KEY)) || blank(); } catch (e) { DB = blank(); }
 { const b = blank(); for (const k in b) if (!(k in DB)) DB[k] = b[k]; for (const k in b.settings) if (!(k in DB.settings)) DB.settings[k] = b.settings[k]; }
+/* ---- Schema version + additive, reversible migration (Phase 0) ----
+   Rules: only ADD missing fields, never remove/rename. A full raw copy of the stored data is written
+   to "mindly.premig" BEFORE any migration runs. restoreMigrationBackup() puts it back. Unknown fields are kept. */
+const SCHEMA = 2, PREMIG = "mindly.premig";
+const MIGRATIONS = {
+  // v1 -> v2: make sure every known collection exists and has the expected shape. Purely additive.
+  2: d => { const b = blank(); for (const k in b) if (!(k in d) || (Array.isArray(b[k]) && !Array.isArray(d[k]))) d[k] = b[k]; if (!d.settings || typeof d.settings !== "object") d.settings = b.settings; for (const k in b.settings) if (!(k in d.settings)) d.settings[k] = b.settings[k]; if (!d.dismissed || typeof d.dismissed !== "object") d.dismissed = {}; return d; }
+};
+function migrateDB(d, raw) {
+  const from = +d.v || 1;
+  if (from >= SCHEMA) return { d, ran: false, from };
+  try { if (raw != null) { localStorage.setItem(PREMIG, raw); localStorage.setItem(PREMIG + ".meta", JSON.stringify({ from, to: SCHEMA, at: Date.now(), n: raw.length })); } } catch (e) { return { d, ran: false, from, err: "backup-failed" }; }
+  const snap = JSON.stringify(d);
+  try { for (let v = from + 1; v <= SCHEMA; v++) if (MIGRATIONS[v]) d = MIGRATIONS[v](d); d.v = SCHEMA; return { d, ran: true, from }; }
+  catch (e) { return { d: JSON.parse(snap), ran: false, from, err: String(e) }; }
+}
+function restoreMigrationBackup() { const raw = localStorage.getItem(PREMIG); if (!raw) return false; try { const d = JSON.parse(raw); if (!validDB(d)) return false; localStorage.setItem(KEY, raw); return true; } catch (e) { return false; } }
+{ const raw = localStorage.getItem(KEY); const r = migrateDB(DB, raw); DB = r.d; window._mig = { from: r.from, ran: r.ran, err: r.err || "", to: DB.v || 1 }; if (r.ran) { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} } }
 const save = () => { DB.updatedAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} if (window.syncSoon) window.syncSoon(); };
 const byId = (arr, id) => arr.find(x => x.id === id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1002,7 +1020,7 @@ function genSyncCode() { const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", b = new U
 function fillDefaults(d) { const b = blank(); for (const k in b) if (!(k in d)) d[k] = b[k]; for (const k in b.settings) if (!(k in d.settings)) d.settings[k] = b.settings[k]; return d; }
 function validDB(d) { return d && typeof d === "object" && Array.isArray(d.people) && Array.isArray(d.commitments) && d.settings && typeof d.settings === "object"; }
 function backupLocal() { try { localStorage.setItem("mindly.prev", JSON.stringify(DB)); } catch (e) {} }
-function adoptDB(d, ts) { backupLocal(); DB = fillDefaults(d); DB.updatedAt = ts || Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} try { applyLang(); render(); } catch (e) {} }
+function adoptDB(d, ts) { backupLocal(); DB = fillDefaults(d); if ((+DB.v || 1) < SCHEMA) { const r = migrateDB(DB, null); DB = r.d; } DB.updatedAt = ts || Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} try { applyLang(); render(); } catch (e) {} }
 async function syncCall(path, body) { const c = new AbortController(), tm = setTimeout(() => c.abort(), 20000); try { const r = await fetch(AI_URL + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: c.signal }); if (!r.ok) return null; return await r.json(); } catch (e) { return null; } finally { clearTimeout(tm); } }
 async function syncPush(force) { const code = syncCode(); if (!code) return false; const ts = DB.updatedAt || Date.now(); if (!force && ts === _lastPush) return true; const r = await syncCall("/sync-put", { code, ts, data: DB }); if (r && r.ok) { _lastPush = ts; localStorage.setItem("mindly.syncok", String(Date.now())); return true; } return false; }
 window.syncSoon = function () { if (!syncCode()) return; clearTimeout(_syncT); _syncT = setTimeout(() => syncPush(false), 6000); };
@@ -1342,7 +1360,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b) { doMerge(a, b); toast(S("Merged.", "تم الدمج.")); } } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v31 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v32 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
-                                                                   </html>
+  </html>
