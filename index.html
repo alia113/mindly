@@ -1367,7 +1367,24 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz],[data-undomg]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b && confirm(mergePreview(a, b))) { doMerge(a, b); toast(S("Merged. You can undo it from Home.", "تم الدمج. تقدر تتراجع من الرئيسية.")); } } else if (d.undomg !== undefined) { toast(undoMerge() ? S("Merge undone.", "تم التراجع عن الدمج.") : S("Couldn’t undo.", "ما قدرت أتراجع.")); } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v34 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v35 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+
+/* ---- Turnstile (INACTIVE until a site key is configured) ----
+   Set window.MINDLY_TS_SITEKEY (or localStorage "mindly.tskey") to the public site key to turn it on.
+   With no key this block does nothing: fetch is not wrapped and no external script is loaded. Failures never block a request. */
+(function () {
+  let key = ""; try { key = window.MINDLY_TS_SITEKEY || localStorage.getItem("mindly.tskey") || ""; } catch (e) {}
+  if (!key || !/^[0-9A-Za-z_-]{8,80}$/.test(key) || window._tsOn) return; window._tsOn = true;
+  let tok = "", tokAt = 0, wid = null, loading = null;
+  const load = () => loading || (loading = new Promise(res => { const s = document.createElement("script"); s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; s.async = true; s.onload = () => res(true); s.onerror = () => res(false); document.head.appendChild(s); }));
+  async function getTok() {
+    if (tok && Date.now() - tokAt < 240000) return tok;
+    if (!(await load()) || !window.turnstile) return "";
+    return new Promise(res => { let el = document.getElementById("ts-box"); if (!el) { el = document.createElement("div"); el.id = "ts-box"; el.style.cssText = "position:fixed;left:-9999px;top:0"; document.body.appendChild(el); } const done = v => { tok = v || ""; tokAt = Date.now(); res(tok); }; try { if (wid !== null) { window.turnstile.reset(wid); } else { wid = window.turnstile.render(el, { sitekey: key, size: "invisible", callback: done, "error-callback": () => done(""), "expired-callback": () => { tok = ""; } }); } } catch (e) { done(""); } setTimeout(() => done(tok), 8000); });
+  }
+  const _f = window.fetch.bind(window);
+  window.fetch = async function (input, init) { try { const u = typeof input === "string" ? input : (input && input.url) || ""; if (u.indexOf(AI_URL) === 0) { const tk = await getTok(); if (tk) { init = Object.assign({}, init); const h = new Headers(init.headers || (typeof input !== "string" && input.headers) || {}); h.set("x-turnstile-token", tk); init.headers = h; } } } catch (e) {} return _f(input, init); };
+})();
 </script>
 </body>
       </html>
