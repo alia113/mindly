@@ -6,7 +6,7 @@
 (function () {
   "use strict";
   if (window.MindlyIDB) return;
-  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals", "alarms", "alarmLog", "routines"];
+  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals", "alarms", "alarmLog", "routines", "reminders"];
   const NAME = "mindly-mirror", LSKEY = "mindly.v1";
   let lastStamp = null, busy = false, st = { ok: null, at: 0, err: "", counts: {}, bytes: 0 };
   const off = () => { try { return localStorage.getItem("mindly.idb.off") === "1"; } catch (e) { return true; } };
