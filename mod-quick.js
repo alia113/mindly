@@ -122,7 +122,7 @@
       [...sh.children].forEach(ch => { if (ch !== head) note.appendChild(ch); }); sh.appendChild(note);
       const area = document.createElement("div"); area.id = "qfarea"; sh.appendChild(area);
       const q = s => area.querySelector(s); let msg = "";
-      const picker = () => { note.style.display = "none"; area.innerHTML = '<div class="m"><b>' + S("What do you want to record?", "شو بدك تسجّل؟") + '</b></div><div class="qfg">' + TYPES().map(t => '<button type="button" class="qft' + (t.k === "note" ? " n" : "") + '" data-t="' + t.k + '"><b>' + t.ic + "</b>" + E(t.l) + "</button>").join("") + '</div><div class="m" id="qfmsg" style="margin-top:10px">' + E(msg) + "</div>"; msg = ""; area.querySelectorAll("[data-t]").forEach(b => b.onclick = () => open(b.dataset.t)); };
+      const picker = () => { note.style.display = "none"; area.innerHTML = '<div class="m"><b>' + S("What do you want to record?", "شو بدك تسجّل؟") + '</b></div><div class="qfg">' + TYPES().map(t => '<button type="button" class="qft' + (t.k === "note" ? " n" : "") + '" data-t="' + t.k + '"><b>' + t.ic + "</b>" + E(t.l) + "</button>").join("") + '</div><div class="m" id="qfmsg" style="margin-top:10px">' + E(msg) + '</div><div class="m" style="text-align:center;font-size:11px;opacity:.5;margin-top:6px">build v81</div>'; msg = ""; area.querySelectorAll("[data-t]").forEach(b => b.onclick = () => open(b.dataset.t)); };
       const back = () => '<div class="m" style="margin-bottom:6px"><button type="button" class="btn" id="qfback">‹ ' + S("Back", "رجوع") + "</button></div>";
       const open = k => {
         if (k === "note") { area.innerHTML = back(); note.style.display = ""; area.querySelector("#qfback").onclick = picker; setTimeout(() => { const t = document.querySelector("#qct"); t && t.focus(); }, 50); return; }
@@ -138,5 +138,9 @@
       picker();
     } catch (e) { /* on any failure the v79 box stays visible */ try { const n = document.querySelector("#qfnote"); if (n) { n.style.display = ""; } } catch (e2) {} }
   };
+  /* app.js bound the + button with `b.onclick = quickCapture` (the original function), so rebind it to the wrapper. */
+  const rebind = () => { try { const b = document.getElementById("qcBtn"); if (b) b.onclick = window.quickCapture; } catch (e) {} };
+  rebind(); setTimeout(rebind, 500); setTimeout(rebind, 3000);
+  window.MINDLY_BUILD = "v81";
   window.MindlyQuickForms = { off: foff, saveForm };
 })();
