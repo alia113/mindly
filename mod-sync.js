@@ -5,7 +5,7 @@
 (function () {
   "use strict";
   if (window.MindlyMerge) return;
-  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals"];
+  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals", "alarms", "alarmLog", "routines"];
   const TOMB_TTL = 90 * 864e5;
   const strip = r => { const o = Object.assign({}, r); delete o.updatedAt; return JSON.stringify(o); };
 
