@@ -5,7 +5,7 @@
   const row = (t, m) => '<div class="card"><div class="t" dir="auto">' + esc(t) + "</div>" + (m ? '<div class="m" dir="auto">' + esc(m) + "</div>" : "") + "</div>";
   function sw(id, label, on) { return '<div class="card" style="display:flex;align-items:center;gap:10px"><div class="t" style="flex:1" dir="auto">' + esc(label) + '</div><button class="btn' + (on ? " p" : "") + '" id="' + id + '">' + (on ? S("On", "شغّال") : S("Off", "مطفي")) + "</button></div>"; }
   function open() {
-    const cnt = ["people", "commitments", "tasks", "events", "memories", "notes", "interactions"].map(k => (DB[k] || []).length + " " + k).join(" · ");
+    const cnt = ["people", "commitments", "tasks", "events", "memories", "notes", "interactions"].map(k => (DB[k] || []).length + " " + ({ people: S("people", "أشخاص"), commitments: S("follow-ups", "متابعات"), tasks: S("tasks", "مهام"), events: S("events", "مواعيد"), memories: S("memories", "ذكريات"), notes: S("notes", "ملاحظات"), interactions: S("interactions", "تفاعلات") }[k])).join(" · ");
     const syncOn = !!localStorage.getItem("mindly.sync") || !!(DB.settings && DB.settings.sync);
     sheet('<h3 style="margin:0 0 4px">' + S("Privacy center", "مركز الخصوصية") + "</h3>" +
       row(S("Where your data lives", "وين بياناتك"), S("Everything you save is stored on this device, in this browser. Mindly has no account system and no server copy unless you turn on sync.", "كل شي بتحفظه مخزّن على هذا الجهاز وفي هذا المتصفح. ما في حسابات ولا نسخة على سيرفر إلا إذا شغّلت المزامنة.")) +
