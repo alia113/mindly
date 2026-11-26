@@ -33,7 +33,7 @@ function migrateDB(d, raw) {
 }
 function restoreMigrationBackup() { const raw = localStorage.getItem(PREMIG); if (!raw) return false; try { const d = JSON.parse(raw); if (!validDB(d)) return false; localStorage.setItem(KEY, raw); return true; } catch (e) { return false; } }
 { const raw = localStorage.getItem(KEY); const r = migrateDB(DB, raw); DB = r.d; window._mig = { from: r.from, ran: r.ran, err: r.err || "", to: DB.v || 1 }; if (r.ran) { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} } }
-const save = () => { DB.updatedAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} if (window.syncSoon) window.syncSoon(); };
+const save = () => { try { if (window.MindlyMerge) MindlyMerge.stamp(); } catch (e) {} DB.updatedAt = Date.now(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} if (window.syncSoon) window.syncSoon(); };
 const byId = (arr, id) => arr.find(x => x.id === id);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const isAr = s => /[\u0600-\u06FF]/.test(s || "");
@@ -1185,7 +1185,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz],[data-undomg]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b && confirm(mergePreview(a, b))) { doMerge(a, b); toast(S("Merged. You can undo it from Home.", "تم الدمج. تقدر تتراجع من الرئيسية.")); } } else if (d.undomg !== undefined) { toast(undoMerge() ? S("Merge undone.", "تم التراجع عن الدمج.") : S("Couldn’t undo.", "ما قدرت أتراجع.")); } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v58 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v59 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 
 /* ---- Turnstile (INACTIVE until a site key is configured) ----
    Set window.MINDLY_TS_SITEKEY (or localStorage "mindly.tskey") to the public site key to turn it on.
