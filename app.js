@@ -185,9 +185,9 @@ function extract(text, ctx) {
 }
 
 /* Apply extraction → persistent linked records. Respects "what AI may remember". */
-function applyExtraction(text, ex, source) {
+function applyExtraction(text, ex, source, reuseInp) {
   const ALW = DB.settings.allow; const created = []; const log = [];
-  const inp = { id: uid("in"), text, ts: Date.now(), source: source || "text" }; DB.inputs.push(inp);
+  const inp = reuseInp || { id: uid("in"), text, ts: Date.now(), source: source || "text" }; if (!reuseInp) DB.inputs.push(inp);
   const person = name => {
     if (!name || !ALW.people) return null; const k = norm(name.toLowerCase());
     let p = DB.people.find(x => norm(x.name.toLowerCase()) === k || norm(x.name.toLowerCase().split(" ")[0]) === k);
@@ -1148,8 +1148,9 @@ function quickCapture() {
   sheet('<div class="m"><b>' + S("Quick capture", "تسجيل سريع") + '</b></div><textarea id="qct" dir="auto" rows="2" placeholder="' + S("Type or dictate: who, what, when…", "اكتب أو املي: مين، شو، ومتى…") + '" style="width:100%;font-size:16px;min-height:0;height:64px;max-height:120px;resize:none;padding:8px 10px;margin-top:4px"></textarea><div class="acts" style="margin-top:8px"><button class="btn p" id="qcs">' + S("Save", "حفظ") + '</button><button class="btn" id="qcm">🎤 ' + S("Voice note", "ملاحظة صوتية") + '</button></div><div class="m" id="qcst"></div>');
   try { const d = $("#dlg"), m = /gap (\d+)/.exec(window._diag || ""); if (d && m && +m[1] <= 2 && /standalone 1/.test(window._diag || "")) d.classList.add("qc-theme"); } catch (e) {} $("#qcst").style.whiteSpace = "pre-line";
   const st = t => { $("#qcst").textContent = T(t); }; setTimeout(() => { const t = $("#qct"); t && t.focus(); }, 250);
-  $("#qcs").onclick = async () => { const t = $("#qct").value.trim(); if (!t) return; const b = $("#qcs"); b.disabled = true; const t0 = Date.now(), cnt = () => [DB.commitments.length, DB.tasks.length, DB.events.length, DB.memories.length, DB.people.length, DB.inputs.length], n0 = cnt(); const tick = () => st(S("Thinking… ", "عم فكر… ") + Math.round((Date.now() - t0) / 1000) + "s"); tick(); const iv = setInterval(tick, 1000);
+  const _qcOld = async () => { const t = $("#qct").value.trim(); if (!t) return; const b = $("#qcs"); b.disabled = true; const t0 = Date.now(), cnt = () => [DB.commitments.length, DB.tasks.length, DB.events.length, DB.memories.length, DB.people.length, DB.inputs.length], n0 = cnt(); const tick = () => st(S("Thinking… ", "عم فكر… ") + Math.round((Date.now() - t0) / 1000) + "s"); tick(); const iv = setInterval(tick, 1000);
     try { const r = await respondAI(t); clearInterval(iv); const n1 = cnt(), nm = [S("Commitments", "الالتزامات"), S("Tasks", "المهام"), S("Events", "المواعيد"), S("Memory", "الذاكرة"), S("People", "الأشخاص")], got = []; for (let i = 0; i < 5; i++) if (n1[i] > n0[i]) got.push(nm[i]); const line = got.length ? S("Saved to: ", "انحفظ في: ") + got.join(", ") : (n1[5] > n0[5] ? S("Saved as a note.", "انحفظت كملاحظة.") : S("Nothing was saved (it was a chat message).", "ما انحفظ شي (كانت رسالة محادثة).")); st((r.text || "").slice(0, 300) + "\n" + line); $("#qct").value = ""; b.disabled = false; render(); } catch (e) { clearInterval(iv); b.disabled = false; st(S("Could not save. Try again.", "ما قدرت احفظ. جرب مرة ثانية.")); } };
+  $("#qcs").onclick = () => { if (window.MindlyQuick && !MindlyQuick.off()) return MindlyQuick.handle(st); return _qcOld(); };
   let rec = null;
   $("#qcm").onclick = async () => {
     if (rec) { rec.stop(); return; }
