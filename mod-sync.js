@@ -5,7 +5,7 @@
 (function () {
   "use strict";
   if (window.MindlyMerge) return;
-  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals", "alarms", "alarmLog", "routines"];
+  const COLS = ["people", "interactions", "notes", "tasks", "events", "commitments", "memories", "projects", "inputs", "goals", "alarms", "alarmLog", "routines", "reminders"];
   const TOMB_TTL = 90 * 864e5;
   const strip = r => { const o = Object.assign({}, r); delete o.updatedAt; return JSON.stringify(o); };
 
@@ -30,7 +30,17 @@
     }
     const now = Date.now(); for (const k in tomb) if (now - tomb[k] > TOMB_TTL) delete tomb[k];
     base.tomb = tomb;
+    /* privacy choice is merged per field by its own timestamp, so an older client or a stale whole-settings copy cannot switch real text back on or off */
+    try { const ls = local.settings || {}, rs = remote.settings || {}, la = typeof ls.pushRealText === "boolean" ? (+ls.pushRealTextAt || 0) : -1, ra = typeof rs.pushRealText === "boolean" ? (+rs.pushRealTextAt || 0) : -1;
+      if (la >= 0 || ra >= 0) { const w = la >= ra ? ls : rs; base.settings = base.settings || {}; base.settings.pushRealText = w.pushRealText; base.settings.pushRealTextAt = +w.pushRealTextAt || 0; base.settings.pushPrivate = w.pushRealText !== true; base.settings.pushPrivateV2 = 1; } } catch (e) {}
     base.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+    /* Guard against an older client (v82) that does not know reminders: it rewrites the cloud copy without them. We never lose them here (the merge above keeps every reminder missing on one side), but we note it so Health can warn. */
+    try {
+      const seen = JSON.parse(localStorage.getItem("mindly.remSeen") || "[]"), rIds = new Set((remote.reminders || []).map(r => r && r.id));
+      const dropped = (local.reminders || []).filter(r => r && r.id && seen.indexOf(r.id) >= 0 && !rIds.has(r.id) && !(tomb[r.id] && tomb[r.id] >= (r.updatedAt || 0))).length;
+      if (dropped) localStorage.setItem("mindly.oldclient", JSON.stringify({ at: Date.now(), n: dropped }));
+      localStorage.setItem("mindly.remSeen", JSON.stringify((base.reminders || []).map(r => r && r.id).filter(Boolean).slice(-300)));
+    } catch (e) {}
     return base;
   }
 
