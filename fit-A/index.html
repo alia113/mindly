@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Fit A</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="FitA"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<style>html,body{margin:0;background:#1b2a41;color:#fff;font:15px -apple-system,sans-serif}
+#t{position:fixed;top:0;left:0;right:0;height:6px;background:#0f0}
+#b{position:fixed;bottom:0;left:0;right:0;height:10px;background:#f00}
+#c{padding:calc(env(safe-area-inset-top) + 16px) 16px 16px}
+h1{font-size:44px;margin:0 0 10px}pre{font-size:14px;white-space:pre-wrap}</style></head><body>
+<div id="t"></div><div id="c"><h1>VARIANT A</h1><pre id="o"></pre></div><div id="b"></div>
+<script>
+function u(){var d=document.createElement('div');d.style.cssText='position:fixed;left:0;top:0;width:1px;height:100dvh;visibility:hidden';document.body.appendChild(d);var dv=d.offsetHeight;d.remove();
+var s=document.createElement('div');s.style.cssText='position:fixed;left:0;top:0;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);visibility:hidden';document.body.appendChild(s);var cs=getComputedStyle(s);var it=cs.paddingTop,ib=cs.paddingBottom;s.remove();
+var bb=document.getElementById('b').getBoundingClientRect().bottom;
+document.getElementById('o').textContent='VARIANT A\ninner '+innerWidth+'x'+innerHeight+'\nscreen '+screen.width+'x'+screen.height+'\nvv '+(visualViewport?visualViewport.height:'-')+'\n100dvh '+dv+'\ninset top '+it+' bottom '+ib+'\nred bar bottom '+bb+'\ngap (screen-inner) '+(screen.height-innerHeight)+'\nstandalone '+(navigator.standalone?1:0)+'\n\nGreen = top of page, Red = bottom:0.\nIs the red bar touching the very bottom edge of the phone?'}
+u();addEventListener('resize',u);setTimeout(u,800);setTimeout(u,2500);
+</script></body></html>
