@@ -37,7 +37,7 @@
   }
   if (typeof applyExtraction === "function") {
     const _ae = applyExtraction;
-    applyExtraction = function (text, ex, source) {
+    applyExtraction = function (text, ex, source, reuse) {
       let held = [];
       try {
         if (!voiceOn() && ex && Array.isArray(ex.commitments) && window.MindlyFollow && !(DB.settings && DB.settings.askAmbiguous === false)) {
@@ -46,8 +46,8 @@
           if (held.length) ex = Object.assign({}, ex, { commitments: keep });
         }
       } catch (e) { held = []; }
-      const r = _ae.call(this, text, ex, source);
-      try { if (!voiceOn()) { const nc = (r && r.newCommit) || []; if (held.length || nc.some(c => c.owner === "me" && c.due)) setTimeout(() => review(held, nc, r && r.inputId), 350); } } catch (e) {}
+      const r = _ae.call(this, text, ex, source, reuse);
+      try { if (!voiceOn()) { const nc = (r && r.newCommit) || []; if (held.length || nc.some(c => c.owner === "me" && c.due)) { const go = () => review(held, nc, r && r.inputId); if (source === "quick") { let n = 0; const iv = setInterval(() => { if (!document.querySelector("#qct") || ++n > 600) { clearInterval(iv); go(); } }, 1000); } else setTimeout(go, 350); } } } catch (e) {}
       return r;
     };
   }
