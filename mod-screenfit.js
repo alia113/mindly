@@ -6,8 +6,9 @@
 (function () {
   "use strict";
   if (window.MindlySF) return;
-  const KEY = "mindly.screenfit.off";
-  const off = () => { try { return localStorage.getItem(KEY) === "1"; } catch (e) { return false; } };
+  const KEY = "mindly.screenfit.on";
+  /* v72: the gap fix is OFF by default. v71 shipped it ON and it failed on a real iPhone (iOS does not paint below the layout viewport, so the nav was cut off). Only an explicit localStorage "mindly.screenfit.on" = "1" enables it (for tests). */
+  const off = () => { try { return localStorage.getItem(KEY) !== "1"; } catch (e) { return true; } };
   const root = document.documentElement;
   const st = document.createElement("style"); st.id = "mindly-screenfit";
   st.textContent =
@@ -47,6 +48,7 @@
     const d = [...sheet.querySelectorAll(".m")].find(x => /^Build v\d+/.test(x.textContent || "")); if (!d) return;
     sheet.setAttribute("data-sf", "1");
     const v = await version(); if (v) d.textContent = d.textContent.replace(/^Build v\d+/, "Build " + v);
+    return; /* v72: no toggle row while the fix is off */
     const row = document.createElement("div"); row.className = "sf-row";
     const b = document.createElement("button"); b.className = "btn";
     const label = () => S2("Screen fit fix: ", "ضبط حجم الشاشة: ") + (off() ? S2("off", "مطفي") : S2("on", "شغال")) + (measure().ok ? "" : S2(" (not needed here)", " (مش محتاجه هنا)"));
