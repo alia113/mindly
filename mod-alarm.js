@@ -412,5 +412,10 @@
   document.addEventListener("click", e => { const b = e.target.closest && e.target.closest("[data-alarm]"); if (b) { e.preventDefault(); unlock(); listScreen(); } });
   setInterval(tick, 1000);
   try { restore(); if (armed()) keepAwake(); render(); } catch (e) {}
-  window.MindlyAlarm = { open: listScreen, startRing, _t: { fireTimeOn, nextFire, streak, achievements, makeShake, makeSteps, genMath, genMem, genSeq, genOrder, pickTypes, dueOn, ring: () => ring, tick } };
+  /* v80: Quick capture adds an alarm with the same defaults as the alarm screen (sound 1, snooze 5x3, 5 rings 2 min apart, no challenge). */
+  function quickAdd(label, hour, minute, weekdays, dateKey) {
+    const a = { schema: 1, id: uidp("a"), label: String(label || "").trim(), hour: +hour, minute: +minute || 0, weekdays: (weekdays || []).map(Number).sort(), oneTimeDate: (weekdays && weekdays.length) ? "" : (dateKey || dkey(new Date())), enabled: true, soundId: 1, snooze: { minutes: SNOOZE_MIN, max: SNOOZE_MAX }, retry: { rings: MAX_RINGS, intervalMinutes: 2 }, challenge: { count: 0, difficulty: "easy", types: ["math", "memory", "puzzle", "practical"] }, routineId: "", linkedTaskId: "", qrCode: "", createdAt: Date.now(), updatedAt: Date.now() };
+    arr("alarms").push(a); save(); unlock(); keepAwake(); return a;
+  }
+  window.MindlyAlarm = { open: listScreen, startRing, quickAdd, _t: { fireTimeOn, nextFire, streak, achievements, makeShake, makeSteps, genMath, genMem, genSeq, genOrder, pickTypes, dueOn, ring: () => ring, tick } };
 })();
