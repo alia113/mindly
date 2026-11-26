@@ -1146,8 +1146,10 @@ function trackLens(ms) { window._fe = Math.max(window._fe || 0, performance.now(
 const _i = s => esc(s);
 function quickCapture() {
   sheet('<div class="m"><b>' + S("Quick capture", "تسجيل سريع") + '</b></div><textarea id="qct" dir="auto" rows="2" placeholder="' + S("Type or dictate: who, what, when…", "اكتب أو املي: مين، شو، ومتى…") + '" style="width:100%;font-size:16px;min-height:0;height:64px;max-height:120px;resize:none;padding:8px 10px;margin-top:4px"></textarea><div class="acts" style="margin-top:8px"><button class="btn p" id="qcs">' + S("Save", "حفظ") + '</button><button class="btn" id="qcm">🎤 ' + S("Voice note", "ملاحظة صوتية") + '</button></div><div class="m" id="qcst"></div>');
+  try { const d = $("#dlg"), m = /gap (\d+)/.exec(window._diag || ""); if (d && m && +m[1] <= 2 && /standalone 1/.test(window._diag || "")) d.classList.add("qc-theme"); } catch (e) {} $("#qcst").style.whiteSpace = "pre-line";
   const st = t => { $("#qcst").textContent = T(t); }; setTimeout(() => { const t = $("#qct"); t && t.focus(); }, 250);
-  $("#qcs").onclick = async () => { const t = $("#qct").value.trim(); if (!t) return; st(S("Saving…", "عم احفظ…")); try { const r = await respondAI(t); closeSheet(); toast(r.text.slice(0, 120)); render(); } catch (e) { st(S("Could not save. Try again.", "ما قدرت احفظ. جرب مرة ثانية.")); } };
+  $("#qcs").onclick = async () => { const t = $("#qct").value.trim(); if (!t) return; const b = $("#qcs"); b.disabled = true; const t0 = Date.now(), cnt = () => [DB.commitments.length, DB.tasks.length, DB.events.length, DB.memories.length, DB.people.length, DB.inputs.length], n0 = cnt(); const tick = () => st(S("Thinking… ", "عم فكر… ") + Math.round((Date.now() - t0) / 1000) + "s"); tick(); const iv = setInterval(tick, 1000);
+    try { const r = await respondAI(t); clearInterval(iv); const n1 = cnt(), nm = [S("Commitments", "الالتزامات"), S("Tasks", "المهام"), S("Events", "المواعيد"), S("Memory", "الذاكرة"), S("People", "الأشخاص")], got = []; for (let i = 0; i < 5; i++) if (n1[i] > n0[i]) got.push(nm[i]); const line = got.length ? S("Saved to: ", "انحفظ في: ") + got.join(", ") : (n1[5] > n0[5] ? S("Saved as a note.", "انحفظت كملاحظة.") : S("Nothing was saved (it was a chat message).", "ما انحفظ شي (كانت رسالة محادثة).")); st((r.text || "").slice(0, 300) + "\n" + line); $("#qct").value = ""; b.disabled = false; render(); } catch (e) { clearInterval(iv); b.disabled = false; st(S("Could not save. Try again.", "ما قدرت احفظ. جرب مرة ثانية.")); } };
   let rec = null;
   $("#qcm").onclick = async () => {
     if (rec) { rec.stop(); return; }
@@ -1200,8 +1202,11 @@ document.addEventListener("click", e => { const t = e.target.closest && e.target
     if (!(await Promise.race([load(), new Promise(r => setTimeout(() => r(false), 5000))])) || !window.turnstile) return "";
     return new Promise(res => { let el = document.getElementById("ts-box"); if (!el) { el = document.createElement("div"); el.id = "ts-box"; el.style.cssText = "position:fixed;left:-9999px;top:0"; document.body.appendChild(el); } const done = v => { tok = v || ""; tokAt = Date.now(); res(tok); }; try { if (wid !== null) { window.turnstile.reset(wid); } else { wid = window.turnstile.render(el, { sitekey: key, size: "invisible", callback: done, "error-callback": () => done(""), "expired-callback": () => { tok = ""; } }); } } catch (e) { done(""); } setTimeout(() => done(tok), 8000); });
   }
+  /* v78: one token request at a time, and ask for the next token in the background so the call finds it ready. Enforcement unchanged: one token per call. */
+  let pend = null, used = ""; const _gt = getTok; getTok = () => pend || (pend = _gt().then(v => { pend = null; return v; }, e => { pend = null; throw e; }));
+  const warm = () => { try { getTok().catch(() => {}); } catch (e) {} }; setTimeout(warm, 2500);
   const _f = window.fetch.bind(window);
-  window.fetch = async function (input, init) { try { const u = typeof input === "string" ? input : (input && input.url) || ""; if (u.indexOf(AI_URL) === 0) { const tk = await getTok(); tok = ""; if (tk) { init = Object.assign({}, init); const h = new Headers(init.headers || (typeof input !== "string" && input.headers) || {}); h.set("x-turnstile-token", tk); init.headers = h; } } } catch (e) {} return _f(input, init); };
+  window.fetch = async function (input, init) { try { const u = typeof input === "string" ? input : (input && input.url) || ""; if (u.indexOf(AI_URL) === 0) { let tk = await getTok(); if (tk && tk === used) { tok = ""; tk = await getTok(); } used = tk; tok = ""; setTimeout(warm, 300); if (tk) { init = Object.assign({}, init); const h = new Headers(init.headers || (typeof input !== "string" && input.headers) || {}); h.set("x-turnstile-token", tk); init.headers = h; } } } catch (e) {} return _f(input, init); };
 })();
 
 /* ---- Settings grouping (Phase 0): moves existing nodes into collapsible sections, keeps every handler.
