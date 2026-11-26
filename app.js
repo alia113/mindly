@@ -774,7 +774,7 @@ function liveSetState(s) { if (V.liveOn && V.state !== s) setState(s); }
 async function startLive() {
   const turn = V.turn; unlockSpeech(); ensureOut(); const ctx = V.out;
   setState("thinking"); setTx("…");
-  let token; try { const r = await fetch(AI_URL + "/live-token", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }); const j = await r.json(); token = j.token; if (!token) throw 0; } catch (e) { return false; }
+  let token; try { const r = await fetch(AI_URL + "/live-token", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lang: A() ? "ar" : "en" }) }); const j = await r.json(); token = j.token; if (!token) throw 0; } catch (e) { return false; }
   try { await getMic(); } catch (e) { setConvo(false); setState("idle"); toast("Microphone blocked. Allow it in the browser, or type instead."); $("#vtext").classList.add("on"); return "denied"; }
   if (!V.active) return "denied";
   const ws = new WebSocket(LIVE_WS + encodeURIComponent(token)); const S = { ws, ready: false, src: [], lt: 0, sp: null, mute: null, gate: false, lastUser: Date.now(), outTx: "", inTx: "", closed: false, opened: Date.now() }; V.ls = S;
@@ -1185,7 +1185,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz],[data-undomg]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b && confirm(mergePreview(a, b))) { doMerge(a, b); toast(S("Merged. You can undo it from Home.", "تم الدمج. تقدر تتراجع من الرئيسية.")); } } else if (d.undomg !== undefined) { toast(undoMerge() ? S("Merge undone.", "تم التراجع عن الدمج.") : S("Couldn’t undo.", "ما قدرت أتراجع.")); } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v61 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v62 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 
 /* ---- Turnstile (INACTIVE until a site key is configured) ----
    Set window.MINDLY_TS_SITEKEY (or localStorage "mindly.tskey") to the public site key to turn it on.
