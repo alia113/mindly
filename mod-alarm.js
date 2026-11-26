@@ -90,7 +90,15 @@
   function genOrder(d, r) { const n = COUNTS[d][1] === 4 ? 4 : d === "medium" ? 6 : 9, set = new Set(); while (set.size < n) set.add(rnd(1, 40, r)); const a = [...set]; for (let i = a.length - 1; i > 0; i--) { const j = rnd(0, i, r); [a[i], a[j]] = [a[j], a[i]]; } return { nums: a }; }
   const PRACTICAL = [["Drink a glass of water", "اشرب كاسة مي"], ["Stand up and stretch for 10 seconds", "قف ومدّد جسمك 10 ثواني"], ["Wash your face", "اغسل وجهك"], ["Open the curtains or turn on a light", "افتح الستاير أو شغّل ضوء"]];
   const MOTION = typeof DeviceMotionEvent !== "undefined";
-  const QRCAP = typeof window.BarcodeDetector !== "undefined" && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const QRCAP = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  /* QR scanning: native BarcodeDetector when present, otherwise jsQR (Apache-2.0), loaded lazily on first scan. */
+  let jsqrP = null;
+  function loadJsQR() { if (window.jsQR) return Promise.resolve(); if (!jsqrP) jsqrP = new Promise((res, rej) => { const el = document.createElement("script"); el.src = "jsqr.min.js"; el.onload = res; el.onerror = () => { jsqrP = null; rej(new Error("jsqr")); }; document.head.appendChild(el); }); return jsqrP; }
+  async function makeScanner() {
+    if (typeof window.BarcodeDetector !== "undefined") { const det = new BarcodeDetector({ formats: ["qr_code"] }); return async v => { const r = await det.detect(v); return r.length ? r[0].rawValue : null; }; }
+    await loadJsQR(); const cv = document.createElement("canvas"), cx = cv.getContext("2d", { willReadFrequently: true });
+    return async v => { const w = v.videoWidth, h = v.videoHeight; if (!w || !h) return null; const sc = Math.min(1, 640 / w); cv.width = Math.round(w * sc); cv.height = Math.round(h * sc); cx.drawImage(v, 0, 0, cv.width, cv.height); const im = cx.getImageData(0, 0, cv.width, cv.height); const r = window.jsQR(im.data, cv.width, cv.height, { inversionAttempts: "dontInvert" }); return r ? r.data : null; };
+  }
   const ALLTYPES = ["math", "memory", "puzzle", "practical", "qr", "shake", "steps"];
   const typeOk = t => t === "shake" || t === "steps" ? MOTION : t === "qr" ? QRCAP : true;
   const TNAME = { math: ["Math", "حساب"], memory: ["Memory", "ذاكرة"], puzzle: ["Puzzle", "ألغاز"], practical: ["Practical", "عملي"], qr: ["QR code", "رمز QR"], shake: ["Shake", "هز"], steps: ["Steps (approx.)", "خطوات (تقريبي)"] };
@@ -282,8 +290,8 @@
   function qrTask(box, code, ok) {
     let stream = null, run = true; box.innerHTML = '<div style="margin-bottom:8px">' + S("Scan your registered QR code", "امسح رمز QR المسجّل") + '</div><video id="alv" playsinline muted style="width:100%;border-radius:12px"></video><div id="alq" class="m"></div>';
     (async () => {
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); const v = box.querySelector("#alv"); v.srcObject = stream; await v.play(); const det = new BarcodeDetector({ formats: ["qr_code"] });
-        while (run) { const r = await det.detect(v); if (r.length && r[0].rawValue === code) { ok(); return; } await new Promise(x => setTimeout(x, 300)); }
+      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); const v = box.querySelector("#alv"); v.srcObject = stream; await v.play(); const scan = await makeScanner();
+        while (run) { const r = await scan(v); if (r && r === code) { ok(); return; } await new Promise(x => setTimeout(x, 300)); }
       } catch (e) { const q = box.querySelector("#alq"); if (q) q.textContent = S("Camera or QR scanning is not available. Use Swap task.", "الكاميرا أو مسح QR مش متاح. استخدم بدّل المهمة."); }
     })();
     return () => { run = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
@@ -314,7 +322,7 @@
   function editor(id) {
     const ex = id && find(id), now = new Date(Date.now() + 120000), a = ex || { schema: 1, id: uidp("a"), label: "", hour: now.getHours(), minute: now.getMinutes(), weekdays: [], oneTimeDate: dkey(now), enabled: true, soundId: 1, snooze: { minutes: SNOOZE_MIN, max: SNOOZE_MAX }, retry: { rings: MAX_RINGS, intervalMinutes: 2 }, challenge: { count: 0, difficulty: "easy", types: ["math", "memory", "puzzle", "practical"] }, routineId: "", linkedTaskId: "", qrCode: "", createdAt: Date.now() };
     const wd = new Set(a.weekdays), ty = new Set(a.challenge.types), tasks = (DB.tasks || []).filter(t => t.status !== "done").slice(0, 40), rts = arr("routines");
-    const why = t => t === "shake" || t === "steps" ? (MOTION ? S("needs motion permission", "بدو إذن الحركة") : S("not available here", "مش متاح هون")) : t === "qr" ? (QRCAP ? S("camera; register a code first", "كاميرا؛ سجّل رمز أول") : S("not available: this browser has no QR scanner", "مش متاح: المتصفح ما فيه ماسح QR")) : "";
+    const why = t => t === "shake" || t === "steps" ? (MOTION ? S("needs motion permission", "بدو إذن الحركة") : S("not available here", "مش متاح هون")) : t === "qr" ? (QRCAP ? S("camera; register a code first", "كاميرا؛ سجّل رمز أول") : S("not available: no camera access in this browser", "مش متاح: ما في وصول للكاميرا بهالمتصفح")) : "";
     sheet('<h3 style="margin:0 0 6px">' + (ex ? S("Edit alarm", "تعديل المنبه") : S("New alarm", "منبه جديد")) + "</h3>" +
       '<div class="card"><input id="al-l" dir="auto" placeholder="' + S("Label", "الاسم") + '" value="' + esc(a.label) + '"><div class="row" style="margin-top:8px"><input id="al-t" type="time" value="' + pad(a.hour) + ":" + pad(a.minute) + '"><input id="al-d" type="date" value="' + esc(a.oneTimeDate || "") + '"></div><div class="m">' + S("Repeat (leave empty for one time on the date)", "التكرار (اتركه فاضي لمرة وحدة بالتاريخ)") + '</div><div class="acts" style="flex-wrap:wrap">' + DAYN.map((d, i) => '<button class="btn' + (wd.has(i) ? " p" : "") + '" data-ad="' + i + '">' + S(d[0], d[1]) + "</button>").join("") + "</div></div>" +
       '<div class="card"><div class="t">' + S("Sound", "الصوت") + '</div><div class="acts" style="flex-wrap:wrap">' + SOUNDS.map(s => '<button class="btn' + (a.soundId === s[0] ? " p" : "") + '" data-as="' + s[0] + '">' + S(s[1], s[2]) + "</button>").join("") + '</div><div class="m">' + S("Tap a sound to hear it. These six sounds are generated by the app.", "اضغط صوت لتسمعه. هالأصوات الستة مولّدة من التطبيق.") + "</div></div>" +
@@ -344,8 +352,8 @@
     sheet('<h3 style="margin:0 0 6px">' + S("Register QR code", "تسجيل رمز QR") + '</h3><video id="rqv" playsinline muted style="width:100%;border-radius:12px"></video><div id="rqs" class="m"></div><div class="acts"><button class="btn" id="rqc">' + S("Cancel", "إلغاء") + "</button></div>", () => {
       const stop = () => { run = false; if (stream) stream.getTracks().forEach(t => t.stop()); };
       document.querySelector("#rqc").onclick = () => { stop(); back(); };
-      (async () => { try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); const v = document.querySelector("#rqv"); v.srcObject = stream; await v.play(); const det = new BarcodeDetector({ formats: ["qr_code"] });
-        while (run) { const r = await det.detect(v); if (r.length) { a.qrCode = r[0].rawValue; const ex = find(a.id); if (ex) { ex.qrCode = a.qrCode; save(); } stop(); document.querySelector("#rqs").textContent = S("Registered.", "تم التسجيل."); setTimeout(back, 600); return; } await new Promise(x => setTimeout(x, 300)); }
+      (async () => { try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }); const v = document.querySelector("#rqv"); v.srcObject = stream; await v.play(); const scan = await makeScanner();
+        while (run) { const r = await scan(v); if (r) { a.qrCode = r; const ex = find(a.id); if (ex) { ex.qrCode = a.qrCode; save(); } stop(); document.querySelector("#rqs").textContent = S("Registered.", "تم التسجيل."); setTimeout(back, 600); return; } await new Promise(x => setTimeout(x, 300)); }
       } catch (e) { const s = document.querySelector("#rqs"); if (s) s.textContent = S("Camera or QR scanning is not available.", "الكاميرا أو مسح QR مش متاح."); } })();
     });
   }
