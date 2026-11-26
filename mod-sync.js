@@ -49,7 +49,7 @@
     for (const id in shadow) if (!(id in cur)) DB.tomb[id] = now;
     shadow = cur;
   }
-  function rebase() { shadow = null; shadowDB = null; }
+  function rebase() { shadow = snapshot(); shadowDB = DB; if (!DB.tomb) DB.tomb = {}; }
 
   try { shadow = snapshot(); shadowDB = DB; } catch (e) {}
   window.MindlyMerge = { mergeDB, stamp, rebase, COLS };
