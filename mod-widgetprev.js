@@ -45,7 +45,7 @@
   }
   function open() {
     const c = cfg(), d = data();
-    const chk = (id, on, lab) => '<label style="display:flex;gap:8px;align-items:center;justify-content:flex-start;margin:6px 0;text-align:start"><input type="checkbox" data-wk="' + id + '"' + (on ? " checked" : "") + "><span>" + lab + "</span></label>";
+    const chk = (id, on, lab) => '<label style="display:flex;gap:8px;align-items:center;justify-content:flex-start;margin:6px 0;text-align:start"><input type="checkbox" style="width:22px;height:22px;flex:none;margin:0" data-wk="' + id + '"' + (on ? " checked" : "") + "><span style=\"flex:1\">" + lab + "</span></label>";
     sheet('<h3 style="margin:0 0 6px">' + S("Widget previews", "معاينة الويدجت") + '</h3><div class="card" style="border-color:#f5a623"><div class="t">' + S("Previews only", "معاينة فقط") + '</div><div class="m">' + S("These are in-app previews. They are not real iOS widgets and will not appear on your Lock Screen or Home Screen. Real widgets need the native app.", "هاي معاينات داخل التطبيق. مش ويدجت iOS حقيقية وما رح تظهر على شاشة القفل أو الرئيسية. الويدجت الحقيقية بدها التطبيق الأصلي.") + "</div></div>" +
       render(d, c) + '<h4 style="margin:12px 0 4px">' + S("What to show", "شو يظهر") + "</h4>" +
       chk("hideLock", c.hideLock, S("Hide sensitive titles on lock-style previews (recommended)", "إخفاء العناوين الحساسة بنمط القفل (مفضل)")) + chk("showTitlesHome", c.showTitlesHome, S("Show task titles on Home sizes", "إظهار عناوين المهام بأحجام الرئيسية")) +
