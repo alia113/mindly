@@ -34,13 +34,13 @@
 
   /* Duplicate detection: same normalized title + same person among active items. */
   function findDups(items) {
-    const seen = {}, groups = [];
+    const seen = new Map(), groups = [];
     for (const c of items) {
       if (!isActive(c)) continue;
       const k = norm(c.title) + "|" + (c.personId || "");
-      if (!k.trim() || k[0] === "|") continue;
-      if (seen[k]) { if (!seen[k]._dups) { seen[k]._dups = [seen[k]]; groups.push(seen[k]._dups); } seen[k]._dups.push(c); }
-      else seen[k] = c;
+      if (!norm(c.title)) continue;
+      if (seen.has(k)) { const g = seen.get(k); if (g.length === 1) groups.push(g); g.push(c); }
+      else seen.set(k, [c]);
     }
     return groups;
   }
