@@ -18,7 +18,8 @@
   function apply() {
     const light = DB.settings && DB.settings.theme === "light";
     document.documentElement.setAttribute("data-theme", light ? "light" : "dark");
-    const m = document.querySelector('meta[name="theme-color"]'); if (m) m.setAttribute("content", light ? "#f4f5f7" : "#050505");
+    const col = light ? "#f4f5f7" : "#050505"; const m = document.querySelector('meta[name="theme-color"]');
+    if (m) { if (m.getAttribute("content") !== col) { const n = document.createElement("meta"); n.setAttribute("name", "theme-color"); n.setAttribute("content", col); m.parentNode.replaceChild(n, m); } } else { const n = document.createElement("meta"); n.setAttribute("name", "theme-color"); n.setAttribute("content", col); document.head.appendChild(n); }
   }
   function toggle() { DB.settings.theme = DB.settings.theme === "light" ? "dark" : "light"; save(); apply(); try { render(); } catch (e) {} }
   apply();
