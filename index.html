@@ -1366,7 +1366,7 @@ function extrasHTML() {
 }
 { const _vh = vHome; vHome = function () { const s = _vh(); const ex = extrasHTML(); if (!ex) return s; const i = s.indexOf('<div class="card"'); return i < 0 ? s + ex : s.slice(0, i) + ex + s.slice(i); }; }
 document.addEventListener("click", e => { const t = e.target.closest && e.target.closest("[data-mg],[data-nomg],[data-nv],[data-nz],[data-undomg]"); if (!t) return; const d = t.dataset; if (d.mg) { const [a, b] = d.mg.split("|").map(id => byId(DB.people, id)); if (a && b && confirm(mergePreview(a, b))) { doMerge(a, b); toast(S("Merged. You can undo it from Home.", "تم الدمج. تقدر تتراجع من الرئيسية.")); } } else if (d.undomg !== undefined) { toast(undoMerge() ? S("Merge undone.", "تم التراجع عن الدمج.") : S("Couldn’t undo.", "ما قدرت أتراجع.")); } else if (d.nomg) { DB.noMerge = (DB.noMerge || []).concat(d.nomg); save(); } else if (d.nv || d.nz) { DB.nudged = DB.nudged || {}; DB.nudged[d.nv || d.nz] = Date.now(); save(); } render(); });
-{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v37 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
+{ const _sd = settingsSheet; settingsSheet = function () { _sd(); fixInset(); const d = $("#dlg"); if (!d) return; const x = document.createElement("div"); x.className = "m"; x.style.cssText = "font-size:10px;opacity:.5;margin-top:10px;direction:ltr"; x.textContent = "Display: " + (window._diag || ""); x.textContent = "Build v38 · " + x.textContent; const sh = d.querySelector(".sheet"); sh && sh.appendChild(x); }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 
 /* ---- Turnstile (INACTIVE until a site key is configured) ----
    Set window.MINDLY_TS_SITEKEY (or localStorage "mindly.tskey") to the public site key to turn it on.
@@ -1384,6 +1384,18 @@ document.addEventListener("click", e => { const t = e.target.closest && e.target
   const _f = window.fetch.bind(window);
   window.fetch = async function (input, init) { try { const u = typeof input === "string" ? input : (input && input.url) || ""; if (u.indexOf(AI_URL) === 0) { const tk = await getTok(); if (tk) { init = Object.assign({}, init); const h = new Headers(init.headers || (typeof input !== "string" && input.headers) || {}); h.set("x-turnstile-token", tk); init.headers = h; } } } catch (e) {} return _f(input, init); };
 })();
+
+/* ---- Settings grouping (Phase 0): moves existing nodes into collapsible sections, keeps every handler.
+   If the sheet layout is not the expected one, nothing is changed. ---- */
+{ const _sg = settingsSheet; settingsSheet = function () { _sg(); try {
+  const sh = document.querySelector("#dlg .sheet"); if (!sh || sh.querySelector(".sgrp")) return;
+  const labels = [...sh.children].filter(c => c.tagName === "LABEL" && c.classList.contains("sw")); if (labels.length !== 10) return;
+  const rem = sh.querySelector(":scope > #rembox"), prof = sh.querySelector(":scope > #profbox"), syn = sh.querySelector(":scope > #syncbox"), acts = sh.querySelector(":scope > .acts"); if (!rem || !prof || !syn || !acts) return;
+  const mk = (title, nodes, open) => { const d = document.createElement("details"); d.className = "sgrp"; d.style.cssText = "margin:10px 0;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:2px 12px"; if (open) d.open = true; const s = document.createElement("summary"); s.style.cssText = "padding:11px 0;font-weight:700;cursor:pointer"; s.textContent = title; d.appendChild(s); nodes.forEach(n => d.appendChild(n)); return d; };
+  const mem = [0, 1, 2, 3, 4, 5, 8].map(i => labels[i]), gen = [6, 7, 9].map(i => labels[i]);
+  const g1 = mk(S("What Mindly remembers", "شو بتتذكّر مايندلي"), mem, true), g2 = mk(S("General", "عام"), gen, false), g3 = mk(S("Reminders", "التذكيرات"), [rem], false), g4 = mk(S("Profile & security", "الملف والأمان"), [prof], false), g5 = mk(S("Backup & sync", "النسخ الاحتياطي والمزامنة"), [syn], false);
+  [g1, g2, g3, g4, g5].forEach(g => sh.insertBefore(g, acts));
+} catch (e) {} }; $("#setBtn").onclick = settingsSheet; $("#vset").onclick = settingsSheet; }
 </script>
 </body>
       </html>
