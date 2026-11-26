@@ -40,3 +40,103 @@
   setTimeout(() => { try { let ch = false; DB.inputs.forEach(i => { if (i.sorting && Date.now() - i.ts > 20000) { localSort(i); delete i.sorting; ch = true; } }); if (ch) save(); } catch (e) {} }, 3000);
   window.MindlyQuick = { handle, off, sortInput };
 })();
+
+/* ---- v80: Quick capture type picker + per-section forms. Wraps quickCapture(): the v79 recorder stays intact behind "Quick note".
+   Forms write records straight into the existing sections (no AI, works offline). Kill switch: localStorage "mindly.quickforms.off"="1". ---- */
+(function () {
+  "use strict";
+  const foff = () => { try { return localStorage.getItem("mindly.quickforms.off") === "1"; } catch (e) { return false; } };
+  const E = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  if (!document.getElementById("qfcss")) { const st = document.createElement("style"); st.id = "qfcss"; st.textContent = ".qfg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.qft{border:1px solid var(--line);background:rgba(128,128,128,.14);color:inherit;border-radius:14px;padding:8px 6px;text-align:center;font-size:14px;min-height:56px}.qft b{display:block;font-size:19px;font-weight:400;margin-bottom:1px}.qft.n{grid-column:1/-1;min-height:48px}.qfl{font-size:12px;opacity:.75;margin:8px 0 3px}.qff input,.qff select{width:100%;font-size:16px;box-sizing:border-box}.qfr{display:flex;gap:8px}.qfr>div{flex:1;min-width:0}.qfch{display:flex;flex-wrap:wrap;gap:6px}.qfch button{padding:7px 11px;border-radius:99px;border:1px solid var(--line);background:rgba(128,128,128,.14);color:inherit;font-size:13px}.qfch button.on{background:var(--acc);color:#fff;border-color:transparent}.qfs{position:sticky;bottom:0;padding:8px 0 4px;background:#121316}html[data-theme=light] .dlg.qc-theme .qfs{background:#fff}"; document.head.appendChild(st); }
+  const T0 = () => DB.people.map(p => p.name);
+  const nk = s => (typeof norm === "function" ? norm(String(s).toLowerCase()) : String(s).toLowerCase()).trim();
+  function personByName(name, create, inpId) {
+    name = (name || "").trim(); if (!name) return null; const k = nk(name);
+    let p = DB.people.find(x => nk(x.name) === k) || DB.people.find(x => nk(x.name.split(" ")[0]) === k && DB.people.filter(y => nk(y.name.split(" ")[0]) === k).length === 1);
+    if (!p && create) { p = { id: uid("p"), name, relation: "", profession: "", comm: "", project: "", interests: [], dates: [], extra: {}, created: Date.now(), srcs: [inpId] }; DB.people.push(p); }
+    return p || null;
+  }
+  const TYPES = () => [
+    { k: "note", ic: "✎", l: S("Quick note (free text)", "ملاحظة سريعة (نص حر)") },
+    { k: "event", ic: "▦", l: S("Appointment", "موعد") },
+    { k: "task", ic: "✓", l: S("Task", "مهمة") },
+    { k: "commit", ic: "⇄", l: S("Commitment / promise", "التزام / وعد") },
+    { k: "person", ic: "◉", l: S("Person", "شخص") },
+    { k: "memory", ic: "✎", l: S("Memory", "ذاكرة") },
+    { k: "goal", ic: "★", l: S("Goal", "هدف") },
+    { k: "remind", ic: "🔔", l: S("Reminder", "تذكير") },
+    { k: "alarm", ic: "⏰", l: S("Alarm", "منبّه") }];
+  const fld = (id, lab, html) => '<div class="qfl">' + lab + "</div>" + html;
+  const inp = (id, ph, ty, v) => '<input id="' + id + '" type="' + (ty || "text") + '" dir="auto" placeholder="' + E(ph || "") + '" value="' + E(v || "") + '" autocomplete="off">';
+  const OPT = () => S(" (optional)", " (اختياري)");
+  const pplist = () => '<datalist id="qfpl">' + T0().map(n => '<option value="' + E(n) + '">').join("") + "</datalist>";
+  const pfield = () => fld("qp", S("Person", "الشخص") + OPT(), '<input id="qp" list="qfpl" dir="auto" autocomplete="off" placeholder="' + S("Pick or type a name", "اختر أو اكتب اسم") + '">' + pplist());
+  const FORMS = {
+    event: () => fld("", S("Name", "الاسم"), inp("qa", "")) + '<div class="qfr"><div>' + fld("", S("Date", "التاريخ"), inp("qb", "", "date", today())) + "</div><div>" + fld("", S("Time", "الوقت") + OPT(), inp("qc", "", "time")) + "</div></div>" + pfield() + fld("", S("Place", "المكان") + OPT(), inp("qd", S("Where?", "وين؟"))),
+    task: () => fld("", S("Title", "العنوان"), inp("qa", "")) + fld("", S("Due", "الموعد النهائي") + OPT(), inp("qb", "", "date")) + pfield(),
+    commit: () => fld("", S("Who promised?", "مين وعد؟"), '<div class="qfch" id="qo"><button type="button" data-o="me" class="on">' + S("I promised", "أنا وعدت") + '</button><button type="button" data-o="them">' + S("They promised me", "هو وعدني") + "</button></div>") + fld("", S("What", "شو الوعد"), inp("qa", "")) + pfield() + fld("", S("Due", "الموعد") + OPT(), inp("qb", "", "date")),
+    person: () => fld("", S("Name", "الاسم"), inp("qa", "")) + fld("", S("Relationship", "العلاقة") + OPT(), inp("qb", S("friend, client…", "صديق، عميل…"))) + fld("", S("Profession", "المهنة") + OPT(), inp("qc", "")),
+    memory: () => fld("", S("Type", "النوع"), '<div class="qfch" id="qo">' + ["Note", "Decision", "Idea", "Discussion", "Preference / habit", "Important date"].map((t, i) => '<button type="button" data-o="' + E(t) + '"' + (i === 0 ? ' class="on"' : "") + ">" + E(typeof tType === "function" ? tType(t) : t) + "</button>").join("") + "</div>") + fld("", S("Text", "النص"), '<textarea id="qa" dir="auto" rows="3" style="width:100%;font-size:16px;box-sizing:border-box"></textarea>') + pfield(),
+    goal: () => fld("", S("Title", "العنوان"), inp("qa", "")) + fld("", S("Due", "الموعد") + OPT(), inp("qb", "", "date")),
+    alarm: () => fld("", S("Time", "الوقت"), inp("qc", "", "time")) + fld("", S("Label", "الاسم") + OPT(), inp("qa", "")) + fld("", S("Repeat", "التكرار") + S(" (none = once)", " (بدون = مرة وحدة)"), '<div class="qfch" id="qdays">' + (A() ? ["أحد", "إثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]).map((n, i) => '<button type="button" data-d="' + i + '">' + n + "</button>").join("") + "</div>") + '<div class="m" style="margin-top:8px;font-size:12px;opacity:.75">' + S("Default sound and snooze. It rings only while Mindly is open on screen.", "صوت وغفوة افتراضية. بيرن فقط والتطبيق مفتوح على الشاشة.") + '</div><div class="m" style="margin-top:6px"><button type="button" class="btn" id="qfalarm">' + S("Advanced options (full alarm screen)", "خيارات متقدمة (شاشة المنبّه الكاملة)") + "</button></div>",
+    remind: () => fld("", S("Remind me to…", "ذكرني بـ…"), inp("qa", "")) + fld("", S("When", "متى"), inp("qb", "", "datetime-local"))
+  };
+  function saveForm(k, q) {
+    const v = id => { const e = q("#" + id); return e ? (e.value || "").trim() : ""; };
+    const own = (q("#qo .on") || {}).dataset; const o = own && own.o;
+    const a = v("qa"), b = v("qb"), c = v("qc"), d = v("qd"), pn = v("qp");
+    if (k === "alarm") {
+      if (!c) return { err: S("Pick a time.", "اختر وقت.") }; if (!(window.MindlyAlarm && MindlyAlarm.quickAdd)) return { err: S("Alarms are unavailable.", "المنبّه غير متاح.") };
+      const t = c.split(":"), days = [...document.querySelectorAll("#qdays .on")].map(x => +x.dataset.d); let dk = null, when = "";
+      if (!days.length) { const n = new Date(), tg = new Date(n.getFullYear(), n.getMonth(), n.getDate(), +t[0], +t[1]); if (tg.getTime() <= Date.now() + 5000) tg.setDate(tg.getDate() + 1); dk = tg.getFullYear() + "-" + String(tg.getMonth() + 1).padStart(2, "0") + "-" + String(tg.getDate()).padStart(2, "0"); when = (dk === today() ? S("today", "اليوم") : S("tomorrow", "بكرة")); } else when = S("repeating", "متكرر");
+      MindlyAlarm.quickAdd(a, +t[0], +t[1], days, dk); return { ok: S("Alarm ", "منبّه ") + c + " " + when };
+    }
+    if (!a) return { err: S("Fill in the first field.", "عبّي الحقل الأول.") };
+    if (k === "event" && !b) return { err: S("Pick a date.", "اختر تاريخ.") };
+    if (k === "remind") { if (!b) return { err: S("Pick a time.", "اختر وقت.") }; if (!(new Date(b).getTime() > Date.now())) return { err: S("Pick a time in the future.", "اختر وقت بالمستقبل.") }; }
+    if (k === "person" && DB.people.some(x => nk(x.name) === nk(a))) return { err: S("This person already exists.", "هذا الشخص موجود.") };
+    if (DB.settings.paused) return { err: S("Memory is paused. Nothing was saved.", "الذاكرة متوقفة. ما انحفظ شي.") };
+    const kl = TYPES().find(t => t.k === k).l; const text = kl + ": " + a + (b ? " · " + b : "") + (pn ? " · " + pn : "");
+    const inpR = { id: uid("in"), text, ts: Date.now(), source: "quick-form" }; DB.inputs.push(inpR);
+    const p = k === "person" ? null : personByName(pn, true, inpR.id); const created = [];
+    if (p && !created.some(x => x.id === p.id) && p.srcs && p.srcs[0] === inpR.id) created.push({ t: "people", id: p.id });
+    let rec;
+    if (k === "event") { rec = { id: uid("e"), title: a, personId: p ? p.id : null, date: b, time: c, inputId: inpR.id }; if (d) rec.place = d; DB.events.push(rec); created.push({ t: "events", id: rec.id }); }
+    else if (k === "task") { rec = { id: uid("t"), title: a, personId: p ? p.id : null, due: b || null, status: "open", kind: "confirmed", inputId: inpR.id, commitmentId: null, created: Date.now() }; DB.tasks.push(rec); created.push({ t: "tasks", id: rec.id }); }
+    else if (k === "commit") { const ow = o === "them" ? "them" : "me"; rec = { id: uid("c"), title: a, personId: p ? p.id : null, personName: p ? p.name : pn, owner: ow, due: b || null, status: ow === "them" ? "waiting" : "pending", kind: "confirmed", inputId: inpR.id, interactionId: null, created: Date.now() }; DB.commitments.push(rec); created.push({ t: "commitments", id: rec.id }); }
+    else if (k === "person") { rec = { id: uid("p"), name: a, relation: b, profession: c, comm: "", project: "", interests: [], dates: [], extra: {}, created: Date.now(), srcs: [inpR.id] }; DB.people.push(rec); created.push({ t: "people", id: rec.id }); }
+    else if (k === "memory") { rec = { id: uid("m"), type: o || "Note", text: a, kind: "confirmed", personId: p ? p.id : null, projectId: null, date: today(), important: false, inputId: inpR.id, created: Date.now() }; DB.memories.push(rec); created.push({ t: "memories", id: rec.id }); }
+    else if (k === "goal") { if (!Array.isArray(DB.goals)) DB.goals = []; rec = { id: uid("g"), title: a, due: b || "", progress: 0, done: false, created: Date.now() }; DB.goals.push(rec); }
+    else if (k === "remind") { const at = new Date(b).getTime(); if (typeof addReminder === "function") addReminder(a, at); else { DB.reminders = DB.reminders || []; DB.reminders.push({ id: "r" + Date.now().toString(36), text: a.slice(0, 120), at }); } }
+    DB.lastCreated = created; save(); try { render(); } catch (e) {}
+    return { ok: kl };
+  }
+  const prev = window.quickCapture;
+  if (typeof prev !== "function") return;
+  window.quickCapture = quickCapture = function () {
+    prev.apply(this, arguments);
+    if (foff()) return;
+    try {
+      const sh = document.querySelector("#dlg .sheet"); if (!sh) return; const head = sh.querySelector(".shead");
+      const note = document.createElement("div"); note.id = "qfnote"; note.style.display = "none";
+      [...sh.children].forEach(ch => { if (ch !== head) note.appendChild(ch); }); sh.appendChild(note);
+      const area = document.createElement("div"); area.id = "qfarea"; sh.appendChild(area);
+      const q = s => area.querySelector(s); let msg = "";
+      const picker = () => { note.style.display = "none"; area.innerHTML = '<div class="m"><b>' + S("What do you want to record?", "شو بدك تسجّل؟") + '</b></div><div class="qfg">' + TYPES().map(t => '<button type="button" class="qft' + (t.k === "note" ? " n" : "") + '" data-t="' + t.k + '"><b>' + t.ic + "</b>" + E(t.l) + "</button>").join("") + '</div><div class="m" id="qfmsg" style="margin-top:10px">' + E(msg) + "</div>"; msg = ""; area.querySelectorAll("[data-t]").forEach(b => b.onclick = () => open(b.dataset.t)); };
+      const back = () => '<div class="m" style="margin-bottom:6px"><button type="button" class="btn" id="qfback">‹ ' + S("Back", "رجوع") + "</button></div>";
+      const open = k => {
+        if (k === "note") { area.innerHTML = back(); note.style.display = ""; area.querySelector("#qfback").onclick = picker; setTimeout(() => { const t = document.querySelector("#qct"); t && t.focus(); }, 50); return; }
+        const kl = TYPES().find(t => t.k === k).l;
+        area.innerHTML = '<div class="qff">' + back() + '<div class="m"><b>' + E(kl) + "</b></div>" + FORMS[k]() + '<div class="acts qfs" style="margin-top:12px"><button class="btn p" id="qfsave" type="button">' + S("Save", "حفظ") + '</button></div><div class="m" id="qfe" style="margin-top:8px;color:var(--warn)"></div></div>';
+        area.querySelector("#qfback").onclick = picker;
+        area.querySelectorAll("#qdays button").forEach(b => b.onclick = () => b.classList.toggle("on"));
+        const al = q("#qfalarm"); if (al) al.onclick = () => { try { closeSheet(); } catch (e) {} MindlyAlarm && MindlyAlarm.open(); };
+        area.querySelectorAll("#qo button").forEach(b => b.onclick = () => { area.querySelectorAll("#qo button").forEach(x => x.classList.remove("on")); b.classList.add("on"); });
+        q("#qfsave").onclick = () => { const r = saveForm(k, q); if (r.err) { q("#qfe").textContent = r.err; return; } msg = S("Saved ✓ ", "انحفظ ✓ ") + r.ok; picker(); };
+        setTimeout(() => { const f = q("#qa"); f && f.focus(); }, 60);
+      };
+      picker();
+    } catch (e) { /* on any failure the v79 box stays visible */ try { const n = document.querySelector("#qfnote"); if (n) { n.style.display = ""; } } catch (e2) {} }
+  };
+  window.MindlyQuickForms = { off: foff, saveForm };
+})();
