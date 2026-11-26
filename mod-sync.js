@@ -52,6 +52,5 @@
   function rebase() { shadow = null; shadowDB = null; }
 
   try { shadow = snapshot(); shadowDB = DB; } catch (e) {}
-  if (typeof save === "function") { const _s = save; save = function () { try { stamp(); } catch (e) {} return _s.apply(this, arguments); }; }
   window.MindlyMerge = { mergeDB, stamp, rebase, COLS };
 })();
